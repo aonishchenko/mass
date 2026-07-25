@@ -29,6 +29,61 @@ const TIER: Record<string, { label: string; cls: string }> = {
   T2: { label: "Builder", cls: "bg-sky-600/15 text-sky-800" },
   T3: { label: "Signer", cls: "bg-emerald-600/18 text-emerald-800" },
 };
+
+/**
+ * Plain-English labels for the visible log. The event NAMES are the schema and
+ * never change — this is presentation only, so a reader who has not read the
+ * spec can still follow what happened.
+ */
+const EVENT_LABEL: Record<string, string> = {
+  "session.created": "session started",
+  "seat.claimed": "seat claimed",
+  "seat.left": "left the room",
+  "seat.rejoined": "rejoined",
+  "verify.selfie.ok": "human verified",
+  "verify.agentkit.ok": "approved as signer",
+  "verify.continuity.ok": "still at the keyboard",
+  "perm.recomputed": "permissions updated",
+  instruct: "asked the agent",
+  "draft.started": "thinking (quick)",
+  "draft.completed": "answered (quick)",
+  "canonical.started": "thinking (careful)",
+  "canonical.completed": "answered (careful)",
+  "contrib.proposed": "taught something",
+  "contrib.challenged": "challenged",
+  "contrib.screened": "safety-checked",
+  "contrib.cosigned": "approved by a signer",
+  "contrib.accepted": "added to the brain",
+  "brain.updated": "brain saved",
+  "archive.written": "session archived",
+  "payment.executed": "payment sent",
+  "hcs.anchored": "recorded on Hedera",
+  "harvest.opened": "review opened",
+  "harvest.closed": "review finished",
+  "harvest.cancelled": "review cancelled",
+  "session.closed": "session closed",
+  "captable.minted": "ownership minted",
+  payout: "crew paid",
+};
+
+const labelFor = (type: string) => EVENT_LABEL[type] ?? type;
+
+/**
+ * The events that are ever submitted to HCS — mirrors ANCHORED in
+ * src/hedera/client.ts. Only these can be "awaiting consensus"; comparing the
+ * whole event count against the topic made the panel claim a permanent, growing
+ * backlog that could never clear.
+ */
+const ANCHORED = new Set([
+  "seat.claimed",
+  "contrib.cosigned",
+  "contrib.accepted",
+  "brain.updated",
+  "payment.executed",
+  "job.settled",
+  "captable.minted",
+  "payout",
+]);
 import { HederaPanel } from "./Hedera";
 import { hashscanTx, usePending, useVisible } from "./ui";
 
@@ -64,6 +119,23 @@ export const Rail: FC<{
   const p = perms(view);
   const pending = Object.values(view.contributions).filter((c) => c.state === "proposed");
   const accepted = Object.values(view.contributions).filter((c) => c.state === "accepted");
+  /** Something has actually been kept in the open review — otherwise approving errors. */
+  const keptAny = pending.some((c) => c.state === "proposed");
+  const anchorableCount = view.events.filter((e) => ANCHORED.has(e.type)).length;
+
+  // Ownership as a share, not a raw count: "1" means nothing to a reader, "100%"
+  // is the number the product is actually about. (Interim proxy until the full
+  // authorship + usage formula is wired.)
+  const totalContributions = Object.values(view.capTable).reduce((a, b) => a + b, 0);
+  const owners = Object.entries(view.capTable)
+    .map(([seat, n]) => ({
+      seat,
+      n,
+      name: view.seats[seat]?.name ?? seat,
+      ensName: view.seats[seat]?.ensName,
+      pct: totalContributions > 0 ? Math.round((n / totalContributions) * 100) : 0,
+    }))
+    .sort((a, b) => b.pct - a.pct || b.n - a.n);
 
   // Seat claim requires a SERVER-verified Selfie Check; the token is issued only
   // after /api/verify/selfie succeeds. See web/src/world.tsx.
@@ -187,10 +259,10 @@ export const Rail: FC<{
                 <span className="flex shrink-0 items-center gap-1.5">
                   {s.sybilScore !== undefined && (
                     <span
-                      title="World sybil score (0–1), derived from credential strength. Below the app threshold a seat is Observer-only."
+                      title="How confident we are this is one real person. Low scores get watch-only access."
                       className="rounded-full bg-[#1a1a18]/6 px-1.5 py-0.5 text-[10px] tabular-nums text-[var(--color-muted)]"
                     >
-                      sybil {s.sybilScore.toFixed(2)}
+                      Sybil {s.sybilScore.toFixed(2)}
                     </span>
                   )}
                   <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${t.cls}`}>
@@ -239,7 +311,7 @@ export const Rail: FC<{
 
       <EnsPanel sessionId={sessionId} closed={view.closed} />
 
-      <Section icon={<SproutIcon size={12} />} title="Awaiting co-sign">
+      <Section icon={<SproutIcon size={12} />} title="Waiting for approval">
         {pending.length === 0 && (
           <p className="text-[11.5px] leading-snug text-[var(--color-muted)]">
             Nothing proposed yet. Use <em>Teach this</em> under any message you
@@ -282,46 +354,74 @@ export const Rail: FC<{
         )}
       </Section>
 
-      <Section icon={<DatabaseIcon size={12} />} title="Brain & cap table">
-        <p className="pb-1 text-[var(--color-muted)]">
-          {accepted.length} accepted contribution{accepted.length === 1 ? "" : "s"}
-        </p>
-        <ul className="space-y-0.5 pb-2">
-          {Object.entries(view.capTable).map(([seat, n]) => (
-            <li key={seat} className="flex justify-between">
-              <span>{view.seats[seat]?.name ?? seat}</span>
-              <span className="tabular-nums text-[var(--color-muted)]">{n}</span>
-            </li>
-          ))}
-        </ul>
-        {view.brainPending && <p className="text-[11px] text-amber-700">writing to 0G Storage…</p>}
+      <Section icon={<DatabaseIcon size={12} />} title="Who owns this agent">
+        {totalContributions === 0 ? (
+          <p className="text-[11.5px] leading-snug text-[var(--color-muted)]">
+            Nobody owns it yet. Teach it something.
+          </p>
+        ) : (
+          <>
+            <p className="pb-1.5 text-[var(--color-muted)]">
+              {accepted.length} thing{accepted.length === 1 ? "" : "s"} taught so far
+            </p>
+            <ul className="space-y-1 pb-2">
+              {owners.map((o) => (
+                <li key={o.seat} className="flex items-baseline justify-between gap-2">
+                  <span className="min-w-0 truncate">
+                    {o.name}
+                    {/* The ENS subname disambiguates: two people can pick the
+                        same display name, and this is the one number that must
+                        never be ambiguous. */}
+                    {o.ensName && (
+                      <span className="block truncate font-mono text-[10px] text-[var(--color-faint)]">
+                        {o.ensName}
+                      </span>
+                    )}
+                  </span>
+                  <span className="shrink-0 tabular-nums">
+                    <strong>{o.pct}%</strong>
+                    <span className="text-[var(--color-muted)]">
+                      {" "}
+                      · {o.n} contribution{o.n === 1 ? "" : "s"}
+                    </span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+        {view.brainPending && <p className="text-[11px] text-amber-700">saving the brain…</p>}
         {view.brainRoot && (
-          <p className="font-mono text-[10px] break-all text-[var(--color-muted)]">
-            brain root {view.brainRoot.slice(0, 18)}…
+          <p className="text-[11px] text-[var(--color-muted)]">
+            <span
+              className="rounded-full bg-emerald-600/15 px-1.5 py-0.5 text-[10px] font-medium text-emerald-800"
+              title={`The agent's brain is stored on 0G and fingerprinted, so any change is detectable.\nContent hash: ${view.brainRoot}`}
+            >
+              ✓ brain verified
+            </span>
           </p>
         )}
       </Section>
 
-      <Section icon={<CheckIcon size={12} />} title="Harvest">
+      <Section icon={<CheckIcon size={12} />} title="Review what we said">
         {!view.harvestOpen ? (
           <>
             <p className="pb-2 text-[11.5px] leading-snug text-[var(--color-muted)]">
-              Just talk to the agent normally. Harvest pulls the teachable moments
-              out of the conversation so you don't have to flag them as you go.
+              Just talk to the agent normally. Then review it together and keep what is worth remembering.
             </p>
             <button
               onClick={act.guard("harvest", () => send({ kind: "openHarvest" }))}
               disabled={!seated || view.closed}
               className="w-full rounded-md border border-[#1a1a18]/20 py-1.5 hover:bg-white/50 disabled:opacity-30"
             >
-              Find teachable moments
+              Review what we said
             </button>
           </>
         ) : (
           <>
             <p className="pb-2 text-[11.5px] leading-snug text-[var(--color-muted)]">
-              What looks worth teaching. <strong>Keep</strong> proposes a line for
-              the brain; it counts once two signers co-sign the batch. Missed
+              What looks worth teaching. <strong>Keep</strong> puts a line forward;
+              it only counts once two signers approve it together. Missed
               something? Use <em>Teach this</em> on the message itself.
             </p>
             <ul className="space-y-1.5">
@@ -374,14 +474,24 @@ export const Rail: FC<{
               )}
             </ul>
             <div className="flex gap-2 pt-2">
+              {/* Offering an action whose only possible outcome is an error
+                  reads as a broken app: nothing kept, or not a signer, means
+                  the server would reject this. Say why instead. */}
               <button
                 onClick={act.guard("cosignBatch", () =>
                   send({ kind: "cosignBatch", harvestId: view.harvestId })
                 )}
-                disabled={!!act.pending}
-                className="flex-1 rounded-md bg-[var(--color-accent)] py-1.5 text-white hover:opacity-85"
+                disabled={!!act.pending || !keptAny || me?.tier !== "T3"}
+                title={
+                  !keptAny
+                    ? "Keep at least one line first"
+                    : me?.tier !== "T3"
+                      ? "Only signers can approve"
+                      : undefined
+                }
+                className="flex-1 rounded-md bg-[var(--color-accent)] py-1.5 text-white hover:opacity-85 disabled:opacity-30"
               >
-                Co-sign batch
+                Approve together
               </button>
               <button
                 onClick={act.guard("cancelHarvest", () =>
@@ -397,7 +507,7 @@ export const Rail: FC<{
         )}
       </Section>
 
-      <HederaPanel eventCount={view.events.length} />
+      <HederaPanel eventCount={view.events.length} anchorable={anchorableCount} />
 
       <Section icon={<ScrollTextIcon size={12} />} title={`Log (${view.events.length})`}>
         <ol className="space-y-0.5 font-mono text-[10.5px] text-[var(--color-muted)]">
@@ -410,7 +520,8 @@ export const Rail: FC<{
                 const body = (
                   <>
                     <span className="truncate">
-                      <span className="text-[var(--color-faint)]">#{e.seq}</span> {e.type}
+                      <span className="text-[var(--color-faint)]">#{e.seq}</span>{" "}
+                    {labelFor(e.type)}
                     </span>
                     <span className="flex shrink-0 items-center gap-1 text-[var(--color-faint)]">
                       {e.payloadHash?.slice(0, 8)}
