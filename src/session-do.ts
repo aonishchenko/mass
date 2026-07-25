@@ -38,8 +38,10 @@ import {
   type VerifyKind,
 } from "./world/verify.js";
 import {
+  agentCard,
   agentTextRecords,
   assembleAgentProfile,
+  registration,
   joinName,
   resolveName,
   uniqueSeatLabel,
@@ -211,8 +213,27 @@ export class SessionRoom extends DurableObject<Env> {
     }
     if (url.pathname.endsWith("/ens/cv") || url.pathname.endsWith("/ens/agent")) {
       const profile = assembleAgentProfile(this.session, this.env);
-      const resolved = await resolveName(this.env, url.searchParams.get("name") || profile.name);
-      return Response.json({ profile, records: agentTextRecords(profile), resolved });
+      const asked = url.searchParams.get("name") || profile.name;
+      const resolved = asked
+        ? await resolveName(this.env, asked)
+        : { name: "", address: null, verified: false, records: {}, dev: false,
+            error: "ENS not configured — no parent name is owned by this deployment" };
+      return Response.json({
+        profile,
+        records: agentTextRecords(profile, { origin: url.origin, registration: registration(this.env) }),
+        resolved,
+      });
+    }
+
+    /**
+     * ENSIP-27 agent card. ENSIP-26 says a client resolves the name and follows
+     * `agent-endpoint[...]`; this is the document it arrives at, and it carries
+     * the ERC-8004 anchor so the identity can be checked on-chain.
+     */
+    if (url.pathname.endsWith("/.well-known/agent.json")) {
+      return Response.json(agentCard(this.session, this.env, url.origin), {
+        headers: { "cache-control": "no-store" },
+      });
     }
 
     if (request.headers.get("Upgrade") !== "websocket") {
