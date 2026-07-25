@@ -1,0 +1,29 @@
+@import "tailwindcss";
+
+@theme {
+  --color-cream: #f0ece0;
+  --color-cream-dark: #2b2a27;
+  --color-ink: #1a1a18;
+  --color-muted: #5b5950;
+  --color-faint: #8a8780;
+  --color-accent: #b4552d;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+}
+
+/* Citation chips (MASS-specs MUST #5) rendered by CitedText. */
+.citation {
+  background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-accent) 45%, transparent);
+  border-radius: 3px;
+  padding: 0 3px;
+  white-space: nowrap;
+}

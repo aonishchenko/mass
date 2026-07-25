@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
+    "predeploy": "npm --prefix web run build",
     "deploy": "wrangler deploy",
     "test": "vitest run",
     "test:watch": "vitest",

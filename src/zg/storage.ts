@@ -35,18 +35,39 @@ export class StorageUnconfigured extends Error {
   }
 }
 
+/**
+ * 0G testnet storage nodes sometimes stall in "waiting for storage node to
+ * sync" indefinitely. The brain write runs on a serialized queue, so one hung
+ * upload would block every later write. Cap it and let the retry-on-next-
+ * acceptance path handle it (§10).
+ */
+const UPLOAD_TIMEOUT_MS = 90_000;
+
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)
+    ),
+  ]);
+}
+
 async function upload(env: StorageEnv, bytes: Uint8Array): Promise<string> {
   if (!env.SESSION_KEY) throw new StorageUnconfigured();
 
   if (env.ZG_STORAGE_SERVICE_URL) {
-    const res = await fetch(`${env.ZG_STORAGE_SERVICE_URL.replace(/\/$/, "")}/upload`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/octet-stream",
-        authorization: `Bearer ${env.STORAGE_AUTH_TOKEN ?? ""}`,
-      },
-      body: bytes,
-    });
+    const res = await withTimeout(
+      fetch(`${env.ZG_STORAGE_SERVICE_URL.replace(/\/$/, "")}/upload`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/octet-stream",
+          authorization: `Bearer ${env.STORAGE_AUTH_TOKEN ?? ""}`,
+        },
+        body: bytes,
+      }),
+      UPLOAD_TIMEOUT_MS,
+      "storage sidecar upload"
+    );
     if (!res.ok) throw new Error(`storage sidecar ${res.status}: ${(await res.text()).slice(0, 200)}`);
     const { rootHash } = await res.json<{ rootHash: string }>();
     if (!rootHash) throw new Error("sidecar returned no rootHash");
@@ -68,7 +89,11 @@ async function upload(env: StorageEnv, bytes: Uint8Array): Promise<string> {
   const signer = new ethers.Wallet(env.ZG_PRIVATE_KEY, provider);
   const indexer = new Indexer(env.ZG_STORAGE_INDEXER);
 
-  const [tx, err] = await indexer.upload(new MemData(bytes), env.ZG_STORAGE_RPC, signer);
+  const [tx, err] = await withTimeout(
+    indexer.upload(new MemData(bytes), env.ZG_STORAGE_RPC, signer),
+    UPLOAD_TIMEOUT_MS,
+    "0G storage upload"
+  );
   if (err) throw err;
 
   // upload() returns either a single result or a batch one depending on input.
