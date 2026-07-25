@@ -33,6 +33,9 @@ export default function App() {
             setLane={setLane}
             canCommit={p.canCommit}
             seated={!!view.you}
+            onTeach={(text) =>
+              send({ kind: "proposeContrib", text, source: "composer" })
+            }
           />
         </main>
         <Rail view={view} send={send} />

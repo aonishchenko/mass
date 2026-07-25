@@ -8,8 +8,9 @@ import {
   ComposerPrimitive,
   MessagePrimitive,
   ThreadPrimitive,
+  useMessage,
 } from "@assistant-ui/react";
-import { ArrowUpIcon, ShieldCheckIcon, ZapIcon } from "lucide-react";
+import { ArrowUpIcon, ShieldCheckIcon, SproutIcon, ZapIcon } from "lucide-react";
 import type { FC } from "react";
 import type { Lane, SessionView } from "./session";
 
@@ -31,10 +32,46 @@ export const CitedText: FC<{ text: string }> = ({ text }) => {
   );
 };
 
-const UserMessage: FC = () => (
-  <MessagePrimitive.Root className="mx-auto w-full max-w-3xl px-4 py-3">
-    <div className="ml-auto w-fit max-w-[80%] rounded-2xl bg-[#1a1a18]/5 px-4 py-2.5 text-[15px] leading-relaxed">
-      <MessagePrimitive.Parts />
+/** Reads the hovered message's own text out of assistant-ui's message context. */
+const TeachThisButton: FC<{ onTeach: (text: string) => void }> = ({ onTeach }) => {
+  const text = useMessage((m) =>
+    m.content
+      .map((p) => (p.type === "text" ? p.text : ""))
+      .join("")
+      .trim()
+  );
+
+  if (!text) return null;
+
+  return (
+    <div className="flex justify-end pt-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+      <button
+        onClick={() => onTeach(text)}
+        title="Propose this as something the agent keeps forever"
+        className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-[var(--color-muted)] transition-colors hover:bg-[#1a1a18]/5 hover:text-[var(--color-ink)]"
+      >
+        <SproutIcon size={12} /> Teach this
+      </button>
+    </div>
+  );
+};
+
+/**
+ * Teaching starts from something you already said (§7.3 "promote"), so there is
+ * one place to type. Hovering your own message offers to teach it; harvest is
+ * the same act in bulk. A separate compose-a-contribution box would put the
+ * fork back at input time, which is what made teaching feel like a chore.
+ */
+const UserMessage: FC<{ onTeach: (text: string) => void; canTeach: boolean }> = ({
+  onTeach,
+  canTeach,
+}) => (
+  <MessagePrimitive.Root className="group mx-auto w-full max-w-3xl px-4 py-3">
+    <div className="ml-auto w-fit max-w-[80%]">
+      <div className="rounded-2xl bg-[#1a1a18]/5 px-4 py-2.5 text-[15px] leading-relaxed">
+        <MessagePrimitive.Parts />
+      </div>
+      {canTeach && <TeachThisButton onTeach={onTeach} />}
     </div>
   </MessagePrimitive.Root>
 );
@@ -93,7 +130,8 @@ export const Thread: FC<{
   setLane: (l: Lane) => void;
   canCommit: boolean;
   seated: boolean;
-}> = ({ view, lane, setLane, canCommit, seated }) => (
+  onTeach: (text: string) => void;
+}> = ({ view, lane, setLane, canCommit, seated, onTeach }) => (
   <ThreadPrimitive.Root className="flex h-full flex-col bg-[var(--color-cream)] font-serif text-[var(--color-ink)]">
     <ThreadPrimitive.Viewport className="flex grow flex-col overflow-y-auto pt-10">
       <ThreadPrimitive.Empty>
@@ -112,7 +150,9 @@ export const Thread: FC<{
 
       <ThreadPrimitive.Messages
         components={{
-          UserMessage,
+          UserMessage: () => (
+            <UserMessage onTeach={onTeach} canTeach={seated && !view.closed} />
+          ),
           AssistantMessage: () => <AssistantMessage view={view} />,
         }}
       />

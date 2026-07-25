@@ -29,7 +29,6 @@ const tierLabel: Record<string, string> = {
 
 export const Rail: FC<{ view: SessionView; send: (i: Intent) => void }> = ({ view, send }) => {
   const [name, setName] = useState("");
-  const [contrib, setContrib] = useState("");
   const seats = Object.values(view.seats);
   const seated = !!view.you;
   const pending = Object.values(view.contributions).filter((c) => c.state === "proposed");
@@ -85,29 +84,16 @@ export const Rail: FC<{ view: SessionView; send: (i: Intent) => void }> = ({ vie
         </ul>
       </Section>
 
-      <Section icon={<SproutIcon size={12} />} title="Teach the agent">
-        <textarea
-          value={contrib}
-          onChange={(e) => setContrib(e.target.value)}
-          disabled={!seated || view.closed}
-          rows={3}
-          placeholder="A rule, policy or standard the agent should keep forever…"
-          className="w-full resize-none rounded-md border border-[#1a1a18]/15 bg-white/70 p-2 outline-none disabled:opacity-50"
-        />
-        <button
-          onClick={() => {
-            if (!contrib.trim()) return;
-            send({ kind: "proposeContrib", text: contrib, source: "composer" });
-            setContrib("");
-          }}
-          disabled={!seated || view.closed}
-          className="mt-1.5 w-full rounded-md bg-[var(--color-ink)] py-1.5 text-[var(--color-cream)] hover:opacity-85 disabled:opacity-30"
-        >
-          Propose contribution
-        </button>
+      <Section icon={<SproutIcon size={12} />} title="Awaiting co-sign">
+        {pending.length === 0 && (
+          <p className="text-[11.5px] leading-snug text-[var(--color-muted)]">
+            Nothing proposed yet. Hover any message you sent and choose{" "}
+            <em>Teach this</em>, or harvest the whole conversation below.
+          </p>
+        )}
 
         {pending.length > 0 && (
-          <ul className="space-y-2 pt-3">
+          <ul className="space-y-2">
             {pending.map((c) => {
               const mine = view.you && c.cosigners.includes(view.you);
               return (
