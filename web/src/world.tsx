@@ -40,6 +40,14 @@ interface WidgetConfig {
   action: string;
   rp_context: RpContext;
   preset: Preset;
+  /**
+   * IDKit defaults `environment` to "production". Not forwarding the server's
+   * value meant the browser produced production proofs while the server signed
+   * and verified as staging — which surfaced as an opaque 403 from our verify
+   * endpoint, and as "Production request detected" in the simulator. Client and
+   * server must always read this from the same place.
+   */
+  environment: "production" | "staging" | "sandbox";
   /** Server-side override so the Builder tier can fall back to Orb. */
   selfiePreset?: "orb" | "selfie";
 }
@@ -82,6 +90,7 @@ export function useWorldVerify(sessionId: string) {
               configured: true;
               app_id: string;
               action: string;
+              environment?: "production" | "staging" | "sandbox";
               rp_context: RpContext;
               selfiePreset?: "orb" | "selfie";
             }
@@ -118,6 +127,7 @@ export function useWorldVerify(sessionId: string) {
           setCfg({
             app_id: ctx.app_id as `app_${string}`,
             action: ctx.action,
+            environment: ctx.environment ?? "production",
             rp_context: ctx.rp_context,
             /**
              * Selfie Check is partner-gated and is not guaranteed to exist in
@@ -175,6 +185,7 @@ export function useWorldVerify(sessionId: string) {
       app_id={cfg.app_id}
       action={cfg.action}
       rp_context={cfg.rp_context}
+      environment={cfg.environment}
       allow_legacy_proofs
       preset={cfg.preset}
       onSuccess={onSuccess}

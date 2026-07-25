@@ -36,7 +36,10 @@
     // off until WORLD_RP_ID is filled too.
     "WORLD_APP_ID": "app_95c2252f501bcd906cea4fcab43ba5cd",
     "WORLD_RP_ID": "rp_6374dd7eeced874f",
-    "WORLD_ENV": "staging",
+    // production => the real World App verifies. staging => the simulator at
+    // simulator.worldcoin.org. The client reads this value from
+    // /api/verify/context, so both halves always agree.
+    "WORLD_ENV": "production",
     "WORLD_ACTION_SELFIE": "mass-selfie",
     "WORLD_ACTION_AGENTKIT": "mass-agentkit",
     "WORLD_SYBIL_THRESHOLD": "0.5",
