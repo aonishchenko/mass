@@ -27,16 +27,22 @@ ZG_PRIVATE_KEY=
 SESSION_KEY=
 
 # ---- Hedera (hedera-spec.md §3) ----
-# Testnet account from https://portal.hedera.com — ECDSA or ED25519, DER or hex.
-# Funds the treasury, pays all fees, and is the operator for every write.
+# From https://portal.hedera.com/dashboard (Testnet).
+#   HEDERA_OPERATOR_ID  = the "Account ID" field, e.g. 0.0.9704601
+#   HEDERA_OPERATOR_KEY = "DER Encoded Private Key" under More Details.
+# Hex and ED25519 encodings also parse; DER is the one to prefer because it
+# carries the curve, so the account type cannot be mismatched by accident.
+# This account funds the treasury and is the operator for every write.
 HEDERA_OPERATOR_ID=
 HEDERA_OPERATOR_KEY=
 
 # Set after the first createTopic(); one topic per agent.
 HEDERA_TOPIC_ID=
 
-# Where pay-per-inference sends its HBAR (the compute provider).
-# A second testnet account is fine for the demo.
+# Where pay-per-inference sends its HBAR (the compute provider) — a SECOND
+# account, since an account cannot pay itself. Leave blank: it is created
+# programmatically from the operator account, which is also the honest way to
+# show account growth (hedera-spec §8).
 HEDERA_COMPUTE_ACCOUNT_ID=
 HEDERA_INFERENCE_PRICE_HBAR=0.1
 

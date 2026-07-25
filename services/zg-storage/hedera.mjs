@@ -38,14 +38,27 @@ function getClient() {
   if (!hederaConfigured()) throw new Error("HEDERA_OPERATOR_ID / _KEY not set");
   if (client) return client;
 
-  // Portal accounts hand out DER-encoded ECDSA keys; older tooling emits raw
-  // ED25519. Accept both rather than making setup a guessing game.
+  // The portal shows the same key three ways (DER, hex-ECDSA, and ED25519 for
+  // ED25519 accounts) and offers both account types. Guessing wrong produces an
+  // opaque INVALID_SIGNATURE at execute time, a long way from the cause — so try
+  // each encoding here instead of making setup a coin flip.
+  const raw = OPERATOR_KEY.trim();
   operatorKey = (() => {
-    try {
-      return PrivateKey.fromStringDer(OPERATOR_KEY);
-    } catch {
-      return PrivateKey.fromStringED25519(OPERATOR_KEY);
+    const attempts = [
+      () => PrivateKey.fromStringDer(raw),
+      () => PrivateKey.fromStringECDSA(raw),
+      () => PrivateKey.fromStringED25519(raw),
+    ];
+    for (const attempt of attempts) {
+      try {
+        return attempt();
+      } catch {
+        /* try the next encoding */
+      }
     }
+    throw new Error(
+      "HEDERA_OPERATOR_KEY is not a recognised key (tried DER, ECDSA hex, ED25519 hex)"
+    );
   })();
 
   client = Client.forTestnet().setOperator(OPERATOR_ID, operatorKey);
