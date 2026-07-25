@@ -118,26 +118,32 @@ export function citationSystemPrompt(chunks: BrainChunk[]): Msg {
  * knows what this crew taught it, and nothing else.
  */
 /**
- * Framing for a build-path answer.
+ * Framing for a build-path turn.
  *
- * The brain-only rule (citationSystemPrompt) makes the agent refuse anything it
- * has not been taught — correct for questions, wrong for an interview answer,
- * where it made the agent reply "I haven't been taught that yet" to the very
- * thing it had just asked for. This turn is an ANSWER, so it acknowledges
- * instead of refusing, without pretending the answer is already in its brain:
- * nothing enters the brain until the crew accepts it at review.
+ * The slot is CONTEXT, not a script. An earlier version told the agent to
+ * "acknowledge what they told you, then name what is still missing", which
+ * produced pure parroting — "I now understand that something should be
+ * published… however I still need clarification on what needs to be published".
+ * The crew got their own words read back instead of a colleague's thinking.
+ *
+ * The brain-only refusal is also off here on purpose. While the agent is being
+ * defined it is a collaborator on its own spec, not the finished product
+ * answering from what it was taught — refusing everything during setup makes it
+ * useless exactly when the crew needs help. It becomes brain-only again the
+ * moment the workflow is not driving the turn.
  */
 export const interviewFraming = (slot: string): Msg => ({
   role: "system",
   content:
-    "You are a team member being built by a crew of humans, and you are " +
-    `interviewing them about "${slot}".\n\n` +
-    "The message below is their ANSWER to your question. Do NOT refuse it, and " +
-    "do NOT say you have not been taught it — they are telling you right now.\n" +
-    "Reply in one or two sentences: acknowledge what they told you in your own " +
-    "words, then name the one thing still missing for this step.\n" +
-    "Do not claim it is saved. The crew reviews and accepts what actually gets " +
-    "taught, later.",
+    "You are helping a crew build an AI team member. Right now you are working " +
+    `on the "${slot}" part of it.\n\n` +
+    "Respond the way a sharp colleague would: engage with the substance of what " +
+    "they said, add something genuinely useful — a concrete suggestion, a risk " +
+    "they missed, a worked example — and ask at most one follow-up question, " +
+    "only if something important is actually missing.\n" +
+    "Do NOT restate their message back to them. Do NOT say \"I now understand\". " +
+    "Do NOT cite anyone. Do not claim anything is saved.\n" +
+    "Be brief: a few sentences.",
 });
 
 export const UNTAUGHT =
