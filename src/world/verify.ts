@@ -200,7 +200,15 @@ export async function verifyWorldProof(
   try {
     const res = await fetch(url, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        // Cloudflare Workers send no User-Agent by default, and World's edge
+        // answers such requests with a bare 403 HTML page — before the proof is
+        // ever looked at. Every verification failed this way, and the empty
+        // body made it look like an application-level rejection.
+        "user-agent": "MASS/1.0 (+https://mass.aonishchenko33.workers.dev)",
+        accept: "application/json",
+      },
       body: JSON.stringify(body),
     });
     status = res.status;
