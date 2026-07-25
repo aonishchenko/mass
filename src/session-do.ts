@@ -906,6 +906,31 @@ export class SessionRoom extends DurableObject<Env> {
       { contribId, verdict: verdict.verdict, attestationRef: verdict.attestationRef },
       { system: true }
     );
+
+    /**
+     * Build-path answers accept on one person's say-so.
+     *
+     * The workflow is an interview: the agent asks what it needs, one person
+     * answers. Holding that answer for a second signature stalls the interview
+     * on someone who may not even be in the room, and several people can still
+     * answer the same step — one is simply enough.
+     *
+     * Free-form contributions still take 2-of-M. Only the guided path is
+     * single-signature.
+     */
+    if (slot && verdict.verdict === "pass") {
+      await this.accept(contribId);
+      // The crew must SEE the agent take it in, otherwise answering feels like
+      // typing into a void. Running it through the brain (which now contains
+      // this answer) is what closes the loop.
+      await this.instruct(
+        `I just taught you: "${text}". In one or two sentences, confirm what you now know and what you still need.`,
+        "draft",
+        seat,
+        slot
+      );
+    }
+
     return contribId;
   }
 

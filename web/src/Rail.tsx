@@ -491,25 +491,8 @@ export const Rail: FC<{
         </div>
       )}
 
-      <Section icon={<UsersIcon size={12} />} title={`Crew (${seats.length + 1})`}>
+      <Section icon={<UsersIcon size={12} />} title={`Crew (${seats.length})`}>
         <ul className="space-y-1.5">
-          {/*
-            We call it a colleague, so it is in the room. Listing the agent
-            first, visually distinct, turns the central claim from copy into
-            something visible on screen.
-          */}
-          <li className="flex items-center justify-between rounded-md bg-[var(--color-accent)]/8 px-1.5 py-1">
-            <span className="min-w-0">
-              <span className="font-semibold">🤖 {agentLabelCap(view)}</span>
-              <span className="text-[var(--color-muted)]"> — the agent</span>
-              <span className="block truncate text-[10px] text-[var(--color-muted)]">
-                {STATUS_LABEL[agentStatus(view)] ??
-                  `knows ${knownThings(view).length} thing${
-                    knownThings(view).length === 1 ? "" : "s"
-                  }`}
-              </span>
-            </span>
-          </li>
           {seats.map((s) => {
             const t = TIER[s.tier] ?? TIER.T1;
             return (
