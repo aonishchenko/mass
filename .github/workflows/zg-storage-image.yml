@@ -1,21 +1,23 @@
 name: Publish & deploy zg-storage
 
-# Builds the 0G Storage sidecar, pushes it to ghcr.io, and tells Railway to pull
-# the new image. Railway deploys from a public image rather than from GitHub
-# source, because its GitHub App is not linked to the Railway account and a
-# project-scoped RAILWAY_API_TOKEN cannot create a repo trigger.
+# Runs on every push to main, but only redeploys when the sidecar image actually
+# changed. It compares the newly built image DIGEST against the digest Railway is
+# already running: identical content means a redeploy would restart a healthy
+# service for nothing, so it is skipped.
 #
-# Path-filtered on purpose: a commit that does not touch the sidecar produces a
-# byte-identical image, so redeploying would restart a healthy service for no
-# reason. Use "Run workflow" to force one.
+# Railway deploys from a public ghcr image rather than from GitHub source,
+# because its GitHub App is not linked to the Railway account and a
+# project-scoped RAILWAY_API_TOKEN cannot create a repo trigger.
 
 on:
   push:
     branches: [main]
-    paths:
-      - "services/zg-storage/**"
-      - ".github/workflows/zg-storage-image.yml"
   workflow_dispatch:
+    inputs:
+      force:
+        description: "Redeploy even if the image is unchanged"
+        type: boolean
+        default: false
 
 concurrency:
   group: zg-storage-deploy
@@ -30,8 +32,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # The default docker driver cannot export a cache; buildx gives us the
-      # docker-container driver, which can.
+      # The default docker driver cannot export a cache; buildx can.
       - uses: docker/setup-buildx-action@v3
 
       - uses: docker/login-action@v3
@@ -51,34 +52,45 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Trigger Railway deploy
+      - name: Deploy to Railway if the image changed
         env:
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
           SERVICE_ID: ${{ secrets.RAILWAY_SERVICE_ID }}
           ENVIRONMENT_ID: ${{ secrets.RAILWAY_ENVIRONMENT_ID }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+          FORCE: ${{ inputs.force }}
         run: |
           set -euo pipefail
 
-          # Pin the service to this exact commit's image. Deploying :latest would
-          # race — Railway could pull whatever :latest points at by the time it
-          # starts, which is not necessarily the image built above.
-          IMAGE="ghcr.io/${{ github.repository_owner }}/mass-zg-storage:${{ github.sha }}"
+          # Pin by digest, not tag. A tag can move between the build and the
+          # pull; a digest is the exact bytes this run produced.
+          IMAGE="ghcr.io/${{ github.repository_owner }}/mass-zg-storage@${DIGEST}"
 
           gql() {
             curl -sS --fail-with-body --max-time 60 https://backboard.railway.com/graphql/v2 \
               -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
-              -H 'content-type: application/json' \
-              -d "$1"
+              -H 'content-type: application/json' -d "$1"
           }
 
-          echo "Pointing service at $IMAGE"
+          CURRENT=$(gql "$(jq -nc --arg s "$SERVICE_ID" '{
+            query: "query($s:String!){ service(id:$s){ serviceInstances{ edges{ node{ source{ image } } } } } }",
+            variables: { s: $s }
+          }')" | jq -r '.data.service.serviceInstances.edges[0].node.source.image // ""')
+
+          echo "running: ${CURRENT:-<none>}"
+          echo "built:   $IMAGE"
+
+          if [ "$CURRENT" = "$IMAGE" ] && [ "${FORCE:-false}" != "true" ]; then
+            echo "Image unchanged — skipping redeploy of a healthy service."
+            exit 0
+          fi
+
           gql "$(jq -nc --arg s "$SERVICE_ID" --arg e "$ENVIRONMENT_ID" --arg i "$IMAGE" '{
             query: "mutation($s:String!,$e:String!,$i:String!){ serviceInstanceUpdate(serviceId:$s, environmentId:$e, input:{ source:{ image:$i } }) }",
             variables: { s: $s, e: $e, i: $i }
           }')" | tee /tmp/update.json
           grep -q '"serviceInstanceUpdate":true' /tmp/update.json
 
-          echo "Deploying"
           gql "$(jq -nc --arg s "$SERVICE_ID" --arg e "$ENVIRONMENT_ID" '{
             query: "mutation($s:String!,$e:String!){ serviceInstanceDeployV2(serviceId:$s, environmentId:$e) }",
             variables: { s: $s, e: $e }
@@ -86,15 +98,14 @@ jobs:
           DEPLOY_ID=$(jq -r '.data.serviceInstanceDeployV2' /tmp/deploy.json)
           echo "deployment: $DEPLOY_ID"
 
-          # Fail the workflow on a failed deploy — a green tick on a broken
-          # deploy is worse than no automation at all.
+          # Fail loudly: a green tick over a broken deploy is worse than none.
           for _ in $(seq 1 40); do
             STATUS=$(gql "$(jq -nc --arg d "$DEPLOY_ID" '{
               query: "query($d:String!){ deployment(id:$d){ status } }", variables: { d: $d }
             }')" | jq -r '.data.deployment.status')
             echo "status: $STATUS"
             case "$STATUS" in
-              SUCCESS) echo "deployed"; exit 0 ;;
+              SUCCESS) echo "DEPLOYED=1" >> "$GITHUB_ENV"; exit 0 ;;
               FAILED|CRASHED) echo "::error::Railway deploy $STATUS"; exit 1 ;;
             esac
             sleep 15
@@ -103,6 +114,7 @@ jobs:
           exit 1
 
       - name: Verify sidecar health
+        if: env.DEPLOYED == '1'
         run: |
           set -euo pipefail
           for _ in $(seq 1 12); do
