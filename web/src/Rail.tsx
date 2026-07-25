@@ -17,16 +17,11 @@ import {
 import { perms, type Intent, type SessionView } from "./session";
 import { EnsPanel } from "./Ens";
 
-type VerifyOptions = {
-  environment?: "production" | "staging";
-  preset?: "orb" | "selfie";
-  dev?: boolean;
-};
+// The one definition lives with the hook that consumes it. A local copy drifted
+// the moment world.tsx grew a field, and the compiler could not see it.
+import type { VerifyOptions, VerifyResult } from "./world";
 
-type VerifyFn = (
-  kind: "selfie" | "agentkit",
-  opts?: VerifyOptions
-) => Promise<{ token: string; sybilScore?: number; dev: boolean }>;
+type VerifyFn = (kind: "selfie" | "agentkit", opts?: VerifyOptions) => Promise<VerifyResult>;
 
 /**
  * World has several ways in and they fail differently: Selfie Check is
@@ -190,7 +185,8 @@ export const Rail: FC<{
     setAuthError(null);
     act.start("claim");
     try {
-      const r = await verify("selfie", opts);
+      // The typed name is what stands in for a unique human in the dev bypass.
+      const r = await verify("selfie", { subject: name.trim(), ...opts });
       send({ kind: "claimSeat", name: name.trim(), selfieToken: r.token });
     } catch (e) {
       setAuthError(e instanceof Error ? e.message : "Verification failed");
@@ -204,7 +200,9 @@ export const Rail: FC<{
     act.start("delegate");
     setAuthError(null);
     try {
-      const r = await verify("agentkit", opts);
+      // Same human as the seat they already hold, so a dev Orb proof stays tied
+      // to them rather than inventing a second person.
+      const r = await verify("agentkit", { subject: me?.name ?? name.trim(), ...opts });
       send({ kind: "delegate", agentkitToken: r.token });
     } catch (e) {
       setAuthError(e instanceof Error ? e.message : "Orb verification failed");
