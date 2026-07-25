@@ -37,6 +37,7 @@ export interface WorldEnv {
    * configured. Never active once WORLD_APP_ID + WORLD_RP_ID are set.
    */
   WORLD_DEV_FALLBACK?: string;
+  WORLD_SELFIE_PRESET?: string;
   /** HMAC secret for session tokens (already used for 0G first-party crypto). */
   SESSION_KEY?: string;
 }

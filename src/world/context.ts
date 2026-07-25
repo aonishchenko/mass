@@ -28,6 +28,8 @@ export type ContextResponse =
       action: string;
       environment: string;
       rp_context: RpContext;
+      /** Builder-tier credential override — see WORLD_SELFIE_PRESET. */
+      selfiePreset: "orb" | "selfie";
     }
   | { configured: false; dev: true }
   | { configured: false; dev: false; error: string };
@@ -56,11 +58,16 @@ export function buildContext(env: WorldEnv, kind: VerifyKind): ContextResponse {
     };
   }
 
+  // WORLD_SELFIE_PRESET=orb makes the Builder tier use Orb instead of the
+  // partner-gated Selfie Check — needed when only the simulator is available.
+  const selfiePreset = env.WORLD_SELFIE_PRESET === "orb" ? "orb" : "selfie";
+
   const action = actionFor(env, kind);
   const sig = signRequest({ signingKeyHex: env.WORLD_RP_PRIVATE_KEY, action });
 
   return {
     configured: true,
+    selfiePreset,
     app_id: env.WORLD_APP_ID!,
     action,
     environment: env.WORLD_ENV ?? "production",

@@ -40,6 +40,8 @@ interface WidgetConfig {
   action: string;
   rp_context: RpContext;
   preset: Preset;
+  /** Server-side override so the Builder tier can fall back to Orb. */
+  selfiePreset?: "orb" | "selfie";
 }
 
 const qs = (sessionId: string) => `session=${encodeURIComponent(sessionId)}`;
@@ -76,7 +78,13 @@ export function useWorldVerify(sessionId: string) {
       setBusy(true);
       try {
         const ctx = (await (await fetch(`/api/verify/context?kind=${kind}&${qs(sessionId)}`)).json()) as
-          | { configured: true; app_id: string; action: string; rp_context: RpContext }
+          | {
+              configured: true;
+              app_id: string;
+              action: string;
+              rp_context: RpContext;
+              selfiePreset?: "orb" | "selfie";
+            }
           | { configured: false; dev?: boolean; error?: string };
 
         // DEV fallback: no World app. Proof is explicitly marked and unverified.
@@ -111,7 +119,18 @@ export function useWorldVerify(sessionId: string) {
             app_id: ctx.app_id as `app_${string}`,
             action: ctx.action,
             rp_context: ctx.rp_context,
-            preset: kind === "agentkit" ? orbLegacy() : selfieCheckLegacy(),
+            /**
+             * Selfie Check is partner-gated and is not guaranteed to exist in
+             * the World simulator, which is the only way to test when the
+             * TestFlight beta is full. `selfiePreset: "orb"` in the context
+             * response falls the Builder tier back to Orb so the whole arc
+             * stays testable — still a real, server-verified proof, just a
+             * different credential. Defaults to Selfie Check.
+             */
+            preset:
+              kind === "agentkit" || ctx.selfiePreset === "orb"
+                ? orbLegacy()
+                : selfieCheckLegacy(),
           });
           setOpen(true);
         });
