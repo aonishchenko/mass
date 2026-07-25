@@ -105,6 +105,13 @@ export async function submitEvent(topicId, event) {
     // off-chain, in the encrypted 0G archive.
     seat: event.actor?.seat ?? event.ref?.seat,
 
+    // A stable, opaque handle for the verified human behind the seat (a
+    // truncated hash of their World nullifier). Seat ids are per-session
+    // randoms; this is what lets a reader of the topic alone say "the same
+    // unique human earned these shares" — which is the claim the cap table
+    // rests on. Hashed and truncated: correlates here, useless elsewhere.
+    humanRef: event.ref?.humanRef,
+
     // A whitelist of non-sensitive correlation keys, so a reader can group
     // "these two cosigns and this acceptance belong to one contribution", and
     // follow a brain update or a payment to the artefact it produced. All are

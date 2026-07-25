@@ -25,8 +25,10 @@ derived by checking this repository, never hand-set.
 Everything else is plumbing and earns nothing. See `CONTRIBUTING.md`.
 
 ## Ownership and earnings
-Ownership = `0.30 × Authorship + 0.70 × Usage`. Run `node scripts/authorship.mjs`
-to compute the Authorship Map from this repository at any commit.
+Today ownership is your share of accepted contributions, recomputable from the
+public Hedera topic. Weighting it by authorship and usage
+(`0.30 × Authorship + 0.70 × Usage`) is designed and documented in
+`CONTRIBUTING.md`, but is not built yet.
 
 ## Where it works
 Directly, and adapter-ready for agent marketplaces. See

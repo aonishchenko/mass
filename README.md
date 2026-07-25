@@ -111,24 +111,24 @@ list. Permissions recompute whenever the crew changes.
 
 ### Ownership & the cap table
 
-Ownership is **computed from the repository, never hand-set** — the same
-discipline as the readiness check. Only the files that shape the agent earn:
-`KNOWLEDGE/`, `SKILLS/`, `SOUL.md`, `PERSONALITY.md`, `VOICE.md`. Everything else
-is plumbing and earns nothing.
+Ownership is **computed from the log, never hand-set.**
+
+**What the code does today (v1):**
 
 ```
-equity = 0.30 × Authorship + 0.70 × Usage
+ownership[human] = accepted contributions by that human ÷ all accepted contributions
 ```
 
-- **Authorship** — how much of the surviving text in the earning files you wrote
-  (format-only changes don't count).
-- **Usage** — how often the agent actually cites your lines when doing paid work.
+Each accepted contribution is anchored to Hedera with the credited seat and a
+`humanRef` — a truncated hash of that person's World nullifier — so the shares
+can be recomputed from the public topic alone, and are keyed to a verified
+unique human rather than to a display name.
 
-Because the log is anchored on-chain and history is append-only, anyone can
-recompute the Authorship Map from the repository at any commit
-(`node scripts/authorship.mjs`) and get the same answer. See
-[`CONTRIBUTING.md`](./CONTRIBUTING.md) for what earns ownership and the house
-rules for knowledge units.
+**Next step (specified, not built):** weighting ownership by *authorship* (how
+much of the surviving text you wrote) and *usage* (how often the agent actually
+cites your lines in paid work), at `0.30 × Authorship + 0.70 × Usage`. That
+formula is the design in [`CONTRIBUTING.md`](./CONTRIBUTING.md); the shipped
+code counts accepted contributions and nothing else.
 
 ### Payment flow (Hedera)
 
@@ -233,7 +233,78 @@ We keep our claims tight and honest:
   step for the same asset.
 - The **crew token** is a *contribution receipt with a royalty fee schedule* —
   never "revenue share," never securities language.
-- Verifiability means **TEE attestation of sealed execution** — not "ZK-proven."
+- A sealed run is reported as **attested only when the provider actually returns
+  an attestation**. When it does not, the answer shows a plain "0G Compute run"
+  reference — the endpoint, model and the provider's response id — which is a
+  record, not a proof. We never mint our own receipt.
+
+---
+
+## How to verify our hashes
+
+Each anchored Hedera message carries a `payloadHash` of the event's payload. A
+hash is only checkable if you can reproduce the exact bytes, so here is the
+recipe — it is implemented in [`src/core/ids.ts`](./src/core/ids.ts):
+
+1. Take the event's `payload` object. If it is `null`/absent, use the JSON value
+   `null`.
+2. Serialise it **canonically**:
+   - object keys sorted with JavaScript's default `Array.prototype.sort()`
+     (UTF-16 code-unit order);
+   - keys whose value is `undefined` are **omitted**;
+   - no whitespace anywhere — `{"a":1,"b":[2,3]}`;
+   - keys and string values quoted by `JSON.stringify`, so its escaping rules
+     apply exactly;
+   - arrays keep their order and are serialised element-by-element with the same
+     rules.
+3. Encode that string as **UTF-8**.
+4. **SHA-256** it.
+5. Render the digest as **lowercase hex**, two characters per byte.
+
+```
+payloadHash = sha256_hex( utf8( canonicalJson(payload) ) )
+```
+
+The anchored message itself is a projection of the event — `id`, `ts`, `type`,
+`actorTier`, `seat`, `humanRef`, `contribId`, `storageRootHash`, `hederaTxId`,
+`payloadHash` — with absent fields omitted. The payload itself never goes to
+Hedera; it stays encrypted on 0G.
+
+---
+
+## Trust boundaries and limitations
+
+Worth stating plainly rather than leaving to be discovered:
+
+- **The Hedera sidecar holds the operator key.** Cloudflare Workers cannot open
+  the gRPC connections the Hedera SDK needs, so all Hedera *writes* run in a
+  small separate service (`services/zg-storage`). That service holds
+  `HEDERA_OPERATOR_KEY` and signs every transaction, and it also holds the 0G
+  storage wallet key. It is a single point of failure and a point where you are
+  trusting us. **If it is offline:** the session keeps working, and the two
+  failure modes differ — worth knowing which is which.
+  - *Anchors are durable.* A record selected for the topic is written to a queue
+    before it is sent, and an alarm retries it with backoff after the object
+    hibernates. The UI shows "N records not yet on-chain" until they land. After
+    repeated failures a record stops being retried and stays counted, so it is
+    visibly missing rather than quietly forgotten.
+  - *Per-inference payments are not queued.* A failed payment is logged and
+    dropped; the answer is still produced, and no `payment.executed` event is
+    emitted, so the log never claims a payment that did not happen. Retrying
+    these is not built.
+
+  Hedera *reads* do not depend on the sidecar: the ticker comes straight from
+  Mirror Node.
+- **The session key is ours.** The brain and archive are encrypted before they
+  leave the Worker with `SESSION_KEY`, which we hold. Nothing on the 0G network
+  is readable without it, and equally nothing is readable *by a contributor*
+  without us. Per-crew key custody is not built.
+- **Testnet, single operator.** Everything runs on Hedera Testnet from one
+  operator account. Crew payouts to individual accounts are specified but not
+  yet wired (see the cap-table note above).
+- **Selfie Check is partner-gated**, so the Builder tier can be configured to
+  fall back to Orb. Both are real, server-verified World proofs; the fallback is
+  a different credential, not a weaker check.
 
 ---
 

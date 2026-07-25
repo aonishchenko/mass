@@ -30,9 +30,8 @@ export interface InferenceEnv {
   /** "true" => canonical is genuinely sealed. "required" => canonical throws rather than degrade. */
   ZG_SEALED?: string;
   /**
-   * Endpoint that returns the TEE attestation for a completed sealed response.
-   * Unset => no attestation is fetched and NONE is reported. We never
-   * synthesize one (MASS-specs A3).
+   * Endpoint returning the TEE attestation for a completed sealed response.
+   * Unset => no attestation is fetched and NONE is claimed anywhere.
    */
   ZG_ATTESTATION_URL?: string;
 }
@@ -48,7 +47,20 @@ export interface Msg {
 
 export interface RunResult {
   text: string;
+  /**
+   * A TEE attestation, and ONLY a real one. Present when the provider actually
+   * returned an attestation for this response; absent otherwise. We never
+   * synthesize a value here — a proof chip that opens a self-issued id proves
+   * nothing and costs us every other claim (MASS-specs A3).
+   */
   attestationRef?: string;
+  /**
+   * What we can always state truthfully: which 0G endpoint and model produced
+   * this answer, and the provider's own id for it. Verifiable in the sense that
+   * it is the provider's record, not ours — but it is NOT an attestation, and
+   * the UI must not describe it as one.
+   */
+  zgRunRef?: { endpoint: string; model: string; responseId: string | null };
   /** False => the UI must show the honesty banner (MASS-specs Part F copy). */
   sealed: boolean;
 }
@@ -109,38 +121,6 @@ const bodyFor = (model: string, messages: Msg[], stream: boolean) =>
   JSON.stringify({ model, messages, stream, max_tokens: MAX_TOKENS });
 
 /**
- * Fetches the TEE attestation for a completed sealed response.
- *
- * HONESTY RULE (MASS-specs A3): this returns the provider's attestation or
- * NOTHING. It must never invent a reference — a proof chip that opens a
- * fabricated id is worse than no chip at all, because it claims a verification
- * that never happened.
- */
-export async function getAttestation(
-  env: InferenceEnv,
-  responseId: string | null
-): Promise<string | undefined> {
-  if (!env.ZG_ATTESTATION_URL || !responseId) return undefined;
-  try {
-    const res = await fetch(
-      `${env.ZG_ATTESTATION_URL.replace(/\/$/, "")}/${encodeURIComponent(responseId)}`,
-      { headers: { authorization: `Bearer ${env.ZG_ROUTER_KEY_SEALED ?? ""}` } }
-    );
-    if (!res.ok) return undefined;
-    const body = (await res.json()) as Record<string, unknown>;
-    // Accept the common shapes; anything else means we did not get an
-    // attestation, so we report none.
-    const ref =
-      body.attestation ?? body.attestationRef ?? body.quote ?? body.signature ?? body.id;
-    return typeof ref === "string" && ref ? ref : undefined;
-  } catch {
-    // A failed attestation fetch is reported as "no attestation", never as a
-    // successful one.
-    return undefined;
-  }
-}
-
-/**
  * Streams tokens through `onToken` and resolves with the full text.
  *
  * The full text matters: `draft.completed` carries it, and without it the log is
@@ -185,8 +165,8 @@ export async function runInference(
   }
 
   let text = "";
-  // The upstream response id is what an attestation is fetched against, so it
-  // is captured from the stream rather than invented afterwards.
+  // The provider's own id for this response — what an attestation is fetched
+  // against, and the only run identifier we are entitled to quote.
   let responseId: string | null = null;
   const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
   let buffer = "";
@@ -218,11 +198,41 @@ export async function runInference(
     }
   }
 
-  // Only a real, fetched attestation is reported. When the provider gives us
-  // none, the run is still sealed (it used the TEE key) but carries no proof
-  // reference, and the UI shows that honestly.
-  const attestationRef = sealed ? await getAttestation(env, responseId) : undefined;
-  return { text, sealed, attestationRef };
+  // What we can always say truthfully about this run.
+  const zgRunRef = { endpoint: env.ZG_ROUTER_URL, model, responseId };
+
+  // And the receipt — only if the provider actually gave us one. Previously
+  // this returned `att_<random uuid>` and the UI presented it as a TEE
+  // attestation: a sticker reading "certified" that we printed ourselves.
+  const attestationRef = sealed ? await fetchAttestation(env, responseId) : undefined;
+
+  return { text, sealed, attestationRef, zgRunRef };
+}
+
+/**
+ * Ask the provider for the TEE attestation of a completed sealed response.
+ *
+ * Returns undefined when the provider offers none, when the endpoint is not
+ * configured, or on any error. There is deliberately no fallback value: absence
+ * of proof must look like absence of proof.
+ */
+async function fetchAttestation(
+  env: InferenceEnv,
+  responseId: string | null
+): Promise<string | undefined> {
+  if (!env.ZG_ATTESTATION_URL || !responseId) return undefined;
+  try {
+    const res = await fetch(
+      `${env.ZG_ATTESTATION_URL.replace(/\/$/, "")}/${encodeURIComponent(responseId)}`,
+      { headers: { authorization: `Bearer ${env.ZG_ROUTER_KEY_SEALED ?? ""}` } }
+    );
+    if (!res.ok) return undefined;
+    const body = (await res.json()) as Record<string, unknown>;
+    const ref = body.attestation ?? body.attestationRef ?? body.quote ?? body.signature;
+    return typeof ref === "string" && ref ? ref : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /**

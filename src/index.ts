@@ -68,11 +68,15 @@ export default {
           const s = (await res.json()) as {
             contributionsAccepted?: number;
             citationsServed?: number;
+            unanchoredEvents?: number;
           };
           if (typeof s.contributionsAccepted === "number") {
             stats.contributionsAccepted = s.contributionsAccepted;
           }
           if (typeof s.citationsServed === "number") stats.citationsServed = s.citationsServed;
+          if (typeof s.unanchoredEvents === "number") {
+            stats.unanchoredEvents = s.unanchoredEvents;
+          }
         } catch {
           // A missing session simply contributes no numbers.
         }

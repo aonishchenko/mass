@@ -95,6 +95,14 @@ interface SocketMeta {
   seat: string | null;
 }
 
+/**
+ * How many times an anchor is retried before it stops being retried. At the
+ * 60s backoff ceiling this is roughly five minutes of trying, which outlasts a
+ * sidecar restart but not a sidecar that is simply gone. The row is kept and
+ * still counted afterwards — see alarm().
+ */
+const MAX_ANCHOR_ATTEMPTS = 10;
+
 export class SessionRoom extends DurableObject<Env> {
   private session: Session;
   /** Candidates live in harvest state, not in the log (§7.5.2). */
@@ -121,6 +129,17 @@ export class SessionRoom extends DurableObject<Env> {
         `CREATE TABLE IF NOT EXISTS seat_tokens (
            token TEXT PRIMARY KEY,
            seat TEXT NOT NULL
+         )`
+      );
+      // Events selected for anchoring that Hedera has not confirmed yet. A row
+      // here is a gap between what our UI shows and what the public ledger
+      // knows — so it is durable, retried by the alarm, and counted in the UI
+      // rather than being silently lost.
+      this.ctx.storage.sql.exec(
+        `CREATE TABLE IF NOT EXISTS pending_anchors (
+           event_id TEXT PRIMARY KEY,
+           body TEXT NOT NULL,
+           attempts INTEGER NOT NULL DEFAULT 0
          )`
       );
       // Sanitized record of every server-side verification, so the check can be
@@ -307,24 +326,100 @@ export class SessionRoom extends DurableObject<Env> {
     // never wait on it, and a failed anchor must not lose a local event
     // (hedera-spec §4.2).
     if (shouldAnchor(type) && hederaEnabled(this.env)) {
-      this.ctx.waitUntil(
-        anchorEvent(this.env, event)
-          .then((r) =>
-            this.emit(
-              "hcs.anchored",
-              {
-                eventId: event.id,
-                topicSequenceNumber: r.sequenceNumber,
-                hederaTxId: r.txId,
-              },
-              { system: true }
-            )
-          )
-          .catch((err) => console.error("[hedera] anchor failed", type, String(err).slice(0, 160)))
+      // Record the intent to anchor BEFORE attempting it. This DO uses the
+      // WebSocket Hibernation API, so it can be evicted while a background send
+      // is still in flight — and a lost `contrib.accepted` anchor would silently
+      // cost someone their share, with the local UI still showing it. The row
+      // survives hibernation; the alarm drains it on the next wake.
+      this.ctx.storage.sql.exec(
+        "INSERT OR IGNORE INTO pending_anchors (event_id, body, attempts) VALUES (?, ?, 0)",
+        event.id,
+        JSON.stringify(event)
       );
+      await this.ctx.storage.setAlarm(Date.now() + 250);
     }
 
     return event;
+  }
+
+  /**
+   * Drains the anchor queue. Runs on an alarm rather than in the background of
+   * a request, so a hibernating object resumes the work instead of losing it.
+   */
+  async alarm() {
+    if (!hederaEnabled(this.env)) return;
+
+    // Only rows still worth trying. Without the attempts bound, five permanently
+    // failing records would occupy the whole window in rowid order and every
+    // event emitted after them would never be sent — the queue would look busy
+    // while quietly anchoring nothing.
+    const rows = this.ctx.storage.sql
+      .exec<{ event_id: string; body: string; attempts: number }>(
+        "SELECT event_id, body, attempts FROM pending_anchors WHERE attempts < ? ORDER BY rowid LIMIT 5",
+        MAX_ANCHOR_ATTEMPTS
+      )
+      .toArray();
+    if (rows.length === 0) return;
+
+    for (const row of rows) {
+      const event = JSON.parse(row.body) as MassEvent;
+      try {
+        const r = await anchorEvent(this.env, event);
+        this.ctx.storage.sql.exec("DELETE FROM pending_anchors WHERE event_id = ?", row.event_id);
+        console.log(`[hedera] anchored ${event.type} ${event.id} seq=${r.sequenceNumber}`);
+        await this.emit(
+          "hcs.anchored",
+          { eventId: event.id, topicSequenceNumber: r.sequenceNumber, hederaTxId: r.txId },
+          { system: true }
+        );
+      } catch (err) {
+        this.ctx.storage.sql.exec(
+          "UPDATE pending_anchors SET attempts = attempts + 1 WHERE event_id = ?",
+          row.event_id
+        );
+        const attempts = row.attempts + 1;
+        console.error(
+          `[hedera] anchor failed ${event.type} ${event.id} attempt=${attempts}:`,
+          String(err).slice(0, 160)
+        );
+        if (attempts >= MAX_ANCHOR_ATTEMPTS) {
+          // Given up on, NOT discarded. The row stays, so the count keeps
+          // reporting it and the UI keeps saying the ledger is missing it —
+          // being permanently wrong out loud beats being quietly wrong.
+          console.error(
+            `[hedera] giving up on ${event.type} ${event.id} after ${attempts} attempts — still counted as unanchored`
+          );
+        }
+      }
+    }
+
+    // Anything still worth trying gets another pass, backing off as attempts
+    // grow so a persistently failing sidecar does not spin. Rows past the limit
+    // are excluded, so the alarm eventually stops instead of retrying forever.
+    const retryable = this.ctx.storage.sql
+      .exec<{ n: number; worst: number | null }>(
+        "SELECT COUNT(*) AS n, MAX(attempts) AS worst FROM pending_anchors WHERE attempts < ?",
+        MAX_ANCHOR_ATTEMPTS
+      )
+      .toArray()[0];
+
+    if ((retryable?.n ?? 0) > 0) {
+      const worst = retryable?.worst ?? 0;
+      await this.ctx.storage.setAlarm(Date.now() + Math.min(60_000, 1000 * 2 ** Math.min(worst, 6)));
+    }
+  }
+
+  /**
+   * Events selected for anchoring that the network has not confirmed yet —
+   * including the ones we have stopped retrying. They are still missing from
+   * the public ledger, which is the thing being reported.
+   */
+  private unanchoredCount(): number {
+    return (
+      this.ctx.storage.sql
+        .exec<{ n: number }>("SELECT COUNT(*) AS n FROM pending_anchors")
+        .toArray()[0]?.n ?? 0
+    );
   }
 
   private broadcast(frame: Frame) {
@@ -364,7 +459,14 @@ export class SessionRoom extends DurableObject<Env> {
         citationsServed += text.match(CITATION)?.length ?? 0;
       }
     }
-    return { contributionsAccepted, citationsServed };
+    return {
+      contributionsAccepted,
+      citationsServed,
+      // Surfaced deliberately: an anchor that never landed means the public
+      // ledger disagrees with what we are showing, and that has to be visible
+      // rather than discovered.
+      unanchoredEvents: this.unanchoredCount(),
+    };
   }
 
   private async recomputePerms() {
@@ -687,7 +789,15 @@ export class SessionRoom extends DurableObject<Env> {
 
     await this.emit(
       lane === "canonical" ? "canonical.completed" : "draft.completed",
-      { runId, lane, text: result.text, attestationRef: result.attestationRef },
+      {
+        runId,
+        lane,
+        text: result.text,
+        // Present ONLY when the provider actually returned an attestation.
+        attestationRef: result.attestationRef,
+        // Always true, never a proof: which endpoint/model/response produced it.
+        zgRunRef: result.zgRunRef,
+      },
       { agent: true }
     );
 
@@ -784,7 +894,16 @@ export class SessionRoom extends DurableObject<Env> {
 
     await this.emit<ContribAcceptedPayload>(
       "contrib.accepted",
-      { contribId, seat: creditSeat, contribNumber, text: c.text },
+      {
+        contribId,
+        seat: creditSeat,
+        // The verified human being credited. A seat id is a per-session random;
+        // this is what makes the share attributable to a unique person on the
+        // public log, and it cannot be changed by the person it names.
+        humanRef: await this.humanRef(creditSeat),
+        contribNumber,
+        text: c.text,
+      },
       { system: true }
     );
 
@@ -794,10 +913,24 @@ export class SessionRoom extends DurableObject<Env> {
       await this.emit("verify.continuity.ok", { seat: creditSeat }, { system: true });
     }
 
-    this.queueBrainWrite();
+    this.queueBrainWrite(contribId);
   }
 
-  private queueBrainWrite() {
+  /**
+   * A stable, opaque handle for the human holding a seat: the first 16 hex
+   * characters of sha256(World nullifier). Publishable — it correlates within
+   * our topic and is useless as a cross-app identifier.
+   *
+   * Undefined for a seat with no recorded nullifier (a legacy seat, or one from
+   * before verification was wired), because inventing one would defeat the point.
+   */
+  private async humanRef(seatId: string): Promise<string | undefined> {
+    const nullifier = this.session.seats[seatId]?.nullifierHash;
+    if (!nullifier) return undefined;
+    return (await hashOf(nullifier)).slice(0, 16);
+  }
+
+  private queueBrainWrite(contribId?: string) {
     this.brainQueue = this.brainQueue.then(async () => {
       const chunks = this.session.brainChunks;
       const prevRoot = this.session.brainRoot;
@@ -806,7 +939,16 @@ export class SessionRoom extends DurableObject<Env> {
         // Only on a real root hash. Never fabricate one (§8.2).
         await this.emit(
           "brain.updated",
-          { storageRootHash: rootHash, prevRoot, chunkCount: chunks.length },
+          {
+            storageRootHash: rootHash,
+            prevRoot,
+            chunkCount: chunks.length,
+            // Which contribution caused this version. Without it the public log
+            // can prove a brain existed and that a person contributed, but not
+            // that their contribution is IN that brain — which is exactly the
+            // link the payout story depends on.
+            contribId,
+          },
           { system: true }
         );
       } catch (err) {

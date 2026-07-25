@@ -36,12 +36,20 @@ A commit without a valid `Verified-Human` trailer cannot be merged.
 | `PERSONALITY.md` | `CAPTABLE/**` |
 | `VOICE.md` | `OPS/**`, `CHANGELOG.md` |
 
-**Ownership** = `0.30 × Authorship + 0.70 × Usage`
-- **Authorship**: how much of the surviving text in the earning files you wrote.
-  Format-only changes do not count.
-- **Usage**: how often the agent actually cites your lines when doing paid work.
+**Ownership today (v1, what the code does):** your share is your accepted
+contributions divided by all accepted contributions. Every acceptance is
+anchored to Hedera with a `humanRef` — a truncated hash of your World nullifier
+— so the split can be recomputed from the public topic and is keyed to a
+verified unique human, not to a display name.
 
-Run `node scripts/authorship.mjs` to see the Authorship Map at any commit.
+**Designed, not yet built:** weighting that share by
+`0.30 × Authorship + 0.70 × Usage`, where
+- **Authorship** is how much of the surviving text in the earning files you
+  wrote (format-only changes would not count), and
+- **Usage** is how often the agent actually cites your lines in paid work.
+
+Treat that formula as the roadmap. The shipped code counts accepted
+contributions and nothing else, and there is no authorship tooling yet.
 
 ## House rules for knowledge units
 - One idea per paragraph. Units are cited by line range, so keep lines meaningful.

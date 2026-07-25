@@ -178,6 +178,13 @@ export interface ContribAcceptedPayload {
   contribId: string;
   /** Seat credited on the cap table. */
   seat: string;
+  /**
+   * Stable, opaque handle for the verified human behind that seat — the
+   * truncated hash of their World nullifier. Seat ids are per-session randoms,
+   * so this is what makes a share attributable to one unique person on the
+   * public log. Absent for seats with no recorded verification.
+   */
+  humanRef?: string;
   /** Per-contributor counter, drives "Alice #7" citations — C2. */
   contribNumber: number;
   text: string;
