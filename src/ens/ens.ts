@@ -15,6 +15,7 @@
  * See docs/ENS-TASK.md.
  */
 
+import { capTable } from "../core/reduce.js";
 import type { Session } from "../core/types.js";
 
 // ---------------------------------------------------------------------------
@@ -143,13 +144,9 @@ const SKILLS = ["technical documentation", "doc review", "developer experience"]
  */
 export function assembleAgentProfile(session: Session, env: EnsEnv): AgentProfile {
   const seats = session.seats;
-  // Cap table: accepted contributions per seat (same fold as reduce.capTable).
-  const alloc: Record<string, number> = {};
-  for (const e of session.events) {
-    if (e.type !== "contrib.accepted") continue;
-    const seat = (e.payload as { seat: string }).seat;
-    alloc[seat] = (alloc[seat] ?? 0) + 1;
-  }
+  // Reuse the canonical fold rather than repeating it — two implementations of
+  // "who owns what" can drift, and this one is shown publicly on the CV.
+  const alloc = capTable(session);
   const total = Object.values(alloc).reduce((a, b) => a + b, 0);
 
   const owners: ProfileOwner[] = Object.entries(alloc)

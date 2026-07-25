@@ -43,7 +43,13 @@ export function Cv({ name }: { name: string }) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch(`/api/ens/cv?name=${encodeURIComponent(name)}`)
+    // The record belongs to the room the agent was built in. Without carrying
+    // the session through, every CV rendered whichever agent happened to live in
+    // the "default" room.
+    const session = new URLSearchParams(location.search).get("session");
+    const qs = new URLSearchParams({ name });
+    if (session) qs.set("session", session);
+    fetch(`/api/ens/cv?${qs}`)
       .then((r) => r.json())
       .then(setData)
       .catch((e) => setError(String(e)));

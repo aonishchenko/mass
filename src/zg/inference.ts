@@ -29,6 +29,12 @@ export interface InferenceEnv {
   ZG_CANONICAL_MODEL: string;
   /** "true" => canonical is genuinely sealed. "required" => canonical throws rather than degrade. */
   ZG_SEALED?: string;
+  /**
+   * Endpoint that returns the TEE attestation for a completed sealed response.
+   * Unset => no attestation is fetched and NONE is reported. We never
+   * synthesize one (MASS-specs A3).
+   */
+  ZG_ATTESTATION_URL?: string;
 }
 
 /** Draft and canonical authenticate with different keys — see ZG_ROUTER_KEY_SEALED. */
@@ -82,6 +88,38 @@ const bodyFor = (model: string, messages: Msg[], stream: boolean) =>
   JSON.stringify({ model, messages, stream });
 
 /**
+ * Fetches the TEE attestation for a completed sealed response.
+ *
+ * HONESTY RULE (MASS-specs A3): this returns the provider's attestation or
+ * NOTHING. It must never invent a reference — a proof chip that opens a
+ * fabricated id is worse than no chip at all, because it claims a verification
+ * that never happened.
+ */
+export async function getAttestation(
+  env: InferenceEnv,
+  responseId: string | null
+): Promise<string | undefined> {
+  if (!env.ZG_ATTESTATION_URL || !responseId) return undefined;
+  try {
+    const res = await fetch(
+      `${env.ZG_ATTESTATION_URL.replace(/\/$/, "")}/${encodeURIComponent(responseId)}`,
+      { headers: { authorization: `Bearer ${env.ZG_ROUTER_KEY_SEALED ?? ""}` } }
+    );
+    if (!res.ok) return undefined;
+    const body = (await res.json()) as Record<string, unknown>;
+    // Accept the common shapes; anything else means we did not get an
+    // attestation, so we report none.
+    const ref =
+      body.attestation ?? body.attestationRef ?? body.quote ?? body.signature ?? body.id;
+    return typeof ref === "string" && ref ? ref : undefined;
+  } catch {
+    // A failed attestation fetch is reported as "no attestation", never as a
+    // successful one.
+    return undefined;
+  }
+}
+
+/**
  * Streams tokens through `onToken` and resolves with the full text.
  *
  * The full text matters: `draft.completed` carries it, and without it the log is
@@ -122,6 +160,9 @@ export async function runInference(
   }
 
   let text = "";
+  // The upstream response id is what an attestation is fetched against, so it
+  // is captured from the stream rather than invented afterwards.
+  let responseId: string | null = null;
   const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
   let buffer = "";
 
@@ -139,7 +180,9 @@ export async function runInference(
       const data = trimmed.slice(5).trim();
       if (data === "[DONE]") continue;
       try {
-        const token = JSON.parse(data)?.choices?.[0]?.delta?.content;
+        const frame = JSON.parse(data);
+        if (!responseId && typeof frame?.id === "string") responseId = frame.id;
+        const token = frame?.choices?.[0]?.delta?.content;
         if (typeof token === "string" && token) {
           text += token;
           onToken(token);
@@ -150,7 +193,11 @@ export async function runInference(
     }
   }
 
-  return { text, sealed, attestationRef: sealed ? `att_${crypto.randomUUID()}` : undefined };
+  // Only a real, fetched attestation is reported. When the provider gives us
+  // none, the run is still sealed (it used the TEE key) but carries no proof
+  // reference, and the UI shows that honestly.
+  const attestationRef = sealed ? await getAttestation(env, responseId) : undefined;
+  return { text, sealed, attestationRef };
 }
 
 /**

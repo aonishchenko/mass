@@ -56,7 +56,7 @@ describe("threshold + config", () => {
 
 describe("verification tokens (HMAC)", () => {
   it("round-trips a selfie token → T2", async () => {
-    const token = await issueToken(env, "selfie", outcome());
+    const token = await issueToken(env, "selfie", outcome(), "sess1");
     const claims = await verifyToken(env, token);
     expect(claims?.kind).toBe("selfie");
     expect(claims?.tier).toBe("T2");
@@ -65,29 +65,38 @@ describe("verification tokens (HMAC)", () => {
   });
 
   it("an agentkit token grants T3", async () => {
-    const token = await issueToken(env, "agentkit", outcome({ credential: "orb", sybilScore: 0.95 }));
+    const token = await issueToken(env, "agentkit", outcome({ credential: "orb", sybilScore: 0.95 }), "sess1");
     expect((await verifyToken(env, token))?.tier).toBe("T3");
   });
 
   it("rejects a tampered signature", async () => {
-    const token = await issueToken(env, "selfie", outcome());
+    const token = await issueToken(env, "selfie", outcome(), "sess1");
     const [payload] = token.split(".");
     expect(await verifyToken(env, `${payload}.not-the-signature`)).toBeNull();
   });
 
   it("rejects a token signed with a different key", async () => {
-    const token = await issueToken(env, "selfie", outcome());
+    const token = await issueToken(env, "selfie", outcome(), "sess1");
     expect(await verifyToken({ SESSION_KEY: "different" }, token)).toBeNull();
   });
 
   it("rejects an expired token", async () => {
     // verifiedAt far in the past → exp (verifiedAt + TTL) is already past.
-    const token = await issueToken(env, "selfie", outcome({ verifiedAt: Date.now() - 60 * 60 * 1000 }));
+    const token = await issueToken(env, "selfie", outcome({ verifiedAt: Date.now() - 60 * 60 * 1000 }), "sess1");
     expect(await verifyToken(env, token)).toBeNull();
   });
 
   it("refuses to issue a token for a failed verification", async () => {
-    await expect(issueToken(env, "selfie", outcome({ ok: false, nullifierHash: null }))).rejects.toThrow();
+    await expect(issueToken(env, "selfie", outcome({ ok: false, nullifierHash: null }), "sess1")).rejects.toThrow();
+  });
+
+  it("carries the session it was issued for, so another room can reject it", async () => {
+    const token = await issueToken(env, "selfie", outcome(), "sess1");
+    const claims = await verifyToken(env, token);
+    expect(claims?.session).toBe("sess1");
+    // The DO compares this against its own session id (see claimSeat): a token
+    // minted for sess1 must not seat its holder in sess2.
+    expect(claims?.session).not.toBe("sess2");
   });
 
   it("returns null for garbage tokens", async () => {
