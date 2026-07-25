@@ -188,6 +188,7 @@ We keep our claims tight and honest:
 | [MASS-specs.md](./MASS-specs.md) | v0.6 single source of truth — positioning, authority model, interface contracts, module cards, feature register, merge points, timeline |
 | [TASKBOARD.md](./TASKBOARD.md) | Checkbox-level execution plan per lane, with merge-point gates |
 | [SUBMISSION-PACK.md](./SUBMISSION-PACK.md) | README skeleton, demo script, booth pitches, video plan, per-track checklists |
+| [PITCH.md](./PITCH.md) | 4-minute pitch script, slide sequence, and an exhaustive Q&A playbook |
 | [world-testing-template.md](./world-testing-template.md) | World beta testing documentation (a required prize deliverable) |
 | [PROVENANCE.md](./PROVENANCE.md) | How these planning documents were developed |
 
