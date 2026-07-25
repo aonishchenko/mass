@@ -125,6 +125,7 @@ export const Rail: FC<{ view: SessionView; send: (i: Intent) => void }> = ({ vie
                   <div className="flex items-center justify-between pt-1.5">
                     <span className="text-[11px] text-[var(--color-faint)]">
                       {c.cosigners.length}/2 co-signed
+                      {mine && c.cosigners.length < 2 && " — needs another seat"}
                     </span>
                     <button
                       onClick={() => send({ kind: "cosign", contribId: c.contribId })}
@@ -270,14 +271,23 @@ export const Rail: FC<{ view: SessionView; send: (i: Intent) => void }> = ({ vie
             Start a new session
           </button>
         ) : (
-          <button
-            onClick={() => send({ kind: "closeSession" })}
-            disabled={!seated || view.harvestOpen}
-            title={view.harvestOpen ? "finish the harvest first" : undefined}
-            className="w-full rounded-md border border-[#1a1a18]/25 py-1.5 hover:bg-white/50 disabled:opacity-30"
-          >
-            Close session — The Birth
-          </button>
+          <>
+            <button
+              onClick={() => send({ kind: "closeSession" })}
+              disabled={!seated || view.harvestOpen}
+              className="w-full rounded-md border border-[#1a1a18]/25 py-1.5 hover:bg-white/50 disabled:opacity-30"
+            >
+              Close session — The Birth
+            </button>
+            {/* A disabled control with no stated reason reads as a broken app. */}
+            {(!seated || view.harvestOpen) && (
+              <p className="pt-1 text-center text-[11px] text-[var(--color-muted)]">
+                {!seated
+                  ? "claim a seat first"
+                  : "finish or cancel the harvest above first"}
+              </p>
+            )}
+          </>
         )}
         {view.archiveRoot && (
           <p className="pt-1.5 font-mono text-[10px] break-all text-[var(--color-muted)]">

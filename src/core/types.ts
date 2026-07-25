@@ -18,6 +18,7 @@ export type EventType =
   | "session.created"
   | "seat.claimed"
   | "seat.left"
+  | "seat.rejoined"
   | "verify.selfie.ok"
   | "verify.agentkit.ok"
   | "verify.continuity.ok"
@@ -218,6 +219,8 @@ export interface BrainDoc {
 
 export type Intent =
   | { kind: "claimSeat"; name: string }
+  /** Re-attach to an existing seat after a reload, using the seat's token. */
+  | { kind: "resumeSeat"; token: string }
   | { kind: "instruct"; text: string; lane: Lane }
   | { kind: "proposeContrib"; text: string; source: ContribSource; fromRunId?: string }
   | { kind: "challengeContrib"; contribId: string; reason: string }
@@ -241,6 +244,11 @@ export type Frame =
   | { t: "delta"; runId: string; token: string }
   /** Full replay on connect/reconnect. */
   | { t: "sync"; events: MassEvent[]; you: string | null }
+  /**
+   * Sent only to the socket that claimed the seat. The token is a credential,
+   * so it never enters the event log, the HCS anchor or the 0G archive.
+   */
+  | { t: "seated"; seat: string; token: string }
   /** Harvest candidates live in harvest state, not in the log — §7.5.2. */
   | { t: "candidates"; harvestId: string; candidates: Candidate[] }
   | { t: "error"; message: string; intent?: IntentKind };

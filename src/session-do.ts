@@ -69,6 +69,14 @@ export class SessionRoom extends DurableObject<Env> {
            body TEXT NOT NULL
          )`
       );
+      // Seat credentials. Deliberately a separate table: these are secrets, and
+      // everything in `events` is destined for the HCS anchor and the 0G archive.
+      this.ctx.storage.sql.exec(
+        `CREATE TABLE IF NOT EXISTS seat_tokens (
+           token TEXT PRIMARY KEY,
+           seat TEXT NOT NULL
+         )`
+      );
       // Persist first, cache second: memory is rebuilt by folding the log.
       const rows = this.ctx.storage.sql
         .exec<{ body: string }>("SELECT body FROM events ORDER BY seq")
@@ -229,6 +237,8 @@ export class SessionRoom extends DurableObject<Env> {
     switch (intent.kind) {
       case "claimSeat":
         return this.claimSeat(intent.name, ws);
+      case "resumeSeat":
+        return this.resumeSeat(intent.token, ws);
       case "instruct":
         return this.instruct(intent.text, intent.lane, seat!);
       case "proposeContrib":
@@ -266,8 +276,40 @@ export class SessionRoom extends DurableObject<Env> {
     );
     await this.emit("verify.agentkit.ok", { seat: seatId }, { system: true });
 
+    const token = newId("tok") + crypto.randomUUID().replace(/-/g, "");
+    this.ctx.storage.sql.exec(
+      "INSERT INTO seat_tokens (token, seat) VALUES (?, ?)",
+      token,
+      seatId
+    );
+
     ws.serializeAttachment({ seat: seatId } satisfies SocketMeta);
+    // Private to this socket — never broadcast.
+    ws.send(JSON.stringify({ t: "seated", seat: seatId, token } satisfies Frame));
     ws.send(JSON.stringify({ t: "sync", events: this.session.events, you: seatId } satisfies Frame));
+    await this.recomputePerms();
+  }
+
+  /**
+   * Reload used to cost you your seat, which silently disabled co-signing and
+   * closing — the seat lived only in the socket attachment. The token restores
+   * it, so a refresh is no longer a way to lose your stake in the session.
+   */
+  private async resumeSeat(token: string, ws: WebSocket) {
+    const row = this.ctx.storage.sql
+      .exec<{ seat: string }>("SELECT seat FROM seat_tokens WHERE token = ?", token)
+      .toArray()[0];
+
+    if (!row || !this.session.seats[row.seat]) {
+      // Stale token (e.g. a different session): let the client claim afresh.
+      ws.send(JSON.stringify({ t: "sync", events: this.session.events, you: null } satisfies Frame));
+      return;
+    }
+
+    ws.serializeAttachment({ seat: row.seat } satisfies SocketMeta);
+    ws.send(JSON.stringify({ t: "seated", seat: row.seat, token } satisfies Frame));
+    ws.send(JSON.stringify({ t: "sync", events: this.session.events, you: row.seat } satisfies Frame));
+    await this.emit("seat.rejoined", { seat: row.seat }, { system: true });
     await this.recomputePerms();
   }
 

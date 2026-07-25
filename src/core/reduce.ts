@@ -50,6 +50,13 @@ export function apply(s: Session, e: MassEvent): Session {
       };
     }
 
+    case "seat.rejoined": {
+      const p = e.payload as { seat: string };
+      const seat = s.seats[p.seat];
+      if (!seat) return s;
+      return { ...s, seats: { ...s.seats, [p.seat]: { ...seat, present: true } } };
+    }
+
     case "verify.selfie.ok": {
       const p = e.payload as SelfieOkPayload;
       const seat = s.seats[p.seat];

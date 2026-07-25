@@ -44,6 +44,7 @@ export function computePerms(crew: Seat[]): Perms {
 /** Minimum tier required to even submit each intent. */
 const MIN_TIER: Record<IntentKind, Tier> = {
   claimSeat: "T1",
+  resumeSeat: "T1",
   instruct: "T2",
   proposeContrib: "T2",
   challengeContrib: "T2",
@@ -73,7 +74,7 @@ export function authorize(
 ): Authorization {
   if (s.closed) return { ok: false, reason: "session is closed" };
 
-  if (kind === "claimSeat") return { ok: true };
+  if (kind === "claimSeat" || kind === "resumeSeat") return { ok: true };
   if (!seat) return { ok: false, reason: "no seat claimed" };
 
   if (!atLeast(seat.tier, MIN_TIER[kind])) {

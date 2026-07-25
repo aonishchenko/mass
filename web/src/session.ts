@@ -99,6 +99,7 @@ function apply(v: SessionView, e: MassEvent): SessionView {
     case "seat.claimed":
       return { ...v, seats: { ...v.seats, [p.seat]: { seat: p.seat, name: p.name, tier: p.tier } } };
     case "seat.left":
+    case "seat.rejoined":
       return v;
     case "verify.selfie.ok": {
       const s = v.seats[p.seat];
@@ -222,6 +223,9 @@ function apply(v: SessionView, e: MassEvent): SessionView {
 
 export type Intent = Record<string, unknown> & { kind: string };
 
+/** Seat token is per-room, so two rooms in one browser keep separate seats. */
+const seatKey = (sessionId: string) => `mass:seat:${sessionId}`;
+
 export function useSession(sessionId: string) {
   const [view, setView] = useState<SessionView>(EMPTY);
   const ws = useRef<WebSocket | null>(null);
@@ -231,15 +235,30 @@ export function useSession(sessionId: string) {
     const socket = new WebSocket(`${proto}://${location.host}/ws?session=${sessionId}`);
     ws.current = socket;
 
-    socket.onopen = () => setView((v) => ({ ...v, connected: true }));
+    socket.onopen = () => {
+      setView((v) => ({ ...v, connected: true }));
+      // Reclaim the seat we already hold in this room, if any. Without this a
+      // refresh silently drops you to observer, which disables co-signing and
+      // closing the session.
+      const token = localStorage.getItem(seatKey(sessionId));
+      if (token) socket.send(JSON.stringify({ kind: "resumeSeat", token }));
+    };
     socket.onclose = () => setView((v) => ({ ...v, connected: false }));
 
     socket.onmessage = (m) => {
       const f = JSON.parse(m.data);
+
+      if (f.t === "seated") {
+        localStorage.setItem(seatKey(sessionId), f.token);
+      }
+
       setView((v) => {
+        if (f.t === "seated") return { ...v, you: f.seat };
         if (f.t === "sync") {
           // Replay the whole log; both tabs converge by construction.
-          const folded = f.events.reduce(apply, { ...EMPTY, connected: true, you: f.you ?? v.you });
+          const you = f.you ?? v.you;
+          if (!f.you && !v.you) localStorage.removeItem(seatKey(sessionId));
+          const folded = f.events.reduce(apply, { ...EMPTY, connected: true, you });
           return { ...folded, events: f.events };
         }
         if (f.t === "event") {
