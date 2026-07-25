@@ -4,11 +4,41 @@ import { Rail } from "./Rail";
 import { Thread } from "./Thread";
 import { perms, useSession, type Lane } from "./session";
 import { useWorldVerify } from "./world";
+import { stepById, type BuildStep } from "./buildPath";
+
+/**
+ * How the crew wants to work.
+ *
+ * FREEFORM: just talk, and teach whatever turns out to be worth keeping.
+ * AGENT WORKFLOW: the agent interviews the crew through the twelve things it
+ * needs (STEP-BY-STEP-AGENT-WORKFLOW.md).
+ *
+ * It is a choice, not a wizard: switching is free, nothing is enforced, and a
+ * crew can jump between the two mid-session.
+ */
+export type Mode = "freeform" | "workflow";
 
 export default function App() {
   const sessionId = new URLSearchParams(location.search).get("session") ?? "default";
   const { view, send, clearError } = useSession(sessionId);
   const world = useWorldVerify(sessionId);
+
+  // Remembered per room, so a refresh does not drop the crew out of the
+  // interview they were halfway through.
+  const [mode, setMode] = useState<Mode>(
+    () => (localStorage.getItem(`mass:mode:${sessionId}`) as Mode) ?? "freeform"
+  );
+  const [activeStep, setActiveStep] = useState<string | undefined>();
+
+  const chooseMode = (m: Mode) => {
+    setMode(m);
+    localStorage.setItem(`mass:mode:${sessionId}`, m);
+    if (m === "freeform") setActiveStep(undefined);
+  };
+
+  const pickStep = (step: BuildStep) => {
+    setActiveStep((current) => (current === step.id ? undefined : step.id));
+  };
 
   const p = perms(view);
 
@@ -25,12 +55,30 @@ export default function App() {
           <Thread
             view={view}
             seated={!!view.you}
+            step={mode === "workflow" ? stepById(activeStep) : undefined}
+            onDismissStep={() => setActiveStep(undefined)}
             onTeach={(text) =>
-              send({ kind: "proposeContrib", text, source: "composer" })
+              // Tag the contribution with the step it answers, so readiness can
+              // be counted from accepted work rather than asserted.
+              send({
+                kind: "proposeContrib",
+                text,
+                source: "composer",
+                slot: mode === "workflow" ? activeStep : undefined,
+              })
             }
           />
         </main>
-        <Rail view={view} send={send} verify={world.verify} verifying={world.busy} />
+        <Rail
+          view={view}
+          send={send}
+          verify={world.verify}
+          verifying={world.busy}
+          mode={mode}
+          setMode={chooseMode}
+          activeStep={activeStep}
+          onPickStep={pickStep}
+        />
       </div>
 
       {/* IDKit mounts once, here. Driven imperatively by useWorldVerify. */}

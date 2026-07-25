@@ -493,7 +493,7 @@ export class SessionRoom extends DurableObject<Env> {
       case "instruct":
         return this.instruct(intent.text, intent.lane, seat!);
       case "proposeContrib":
-        return this.propose(intent.text, intent.source, seat!, intent.fromRunId);
+        return this.propose(intent.text, intent.source, seat!, intent.fromRunId, intent.slot);
       case "challengeContrib":
         return this.emit(
           "contrib.challenged",
@@ -849,12 +849,14 @@ export class SessionRoom extends DurableObject<Env> {
     text: string,
     source: ContribSource,
     seat: Seat,
-    fromRunId?: string
+    fromRunId?: string,
+    /** Build-path step this answers, when the crew follows the workflow. */
+    slot?: string
   ) {
     const contribId = newId("c");
     await this.emit(
       "contrib.proposed",
-      { contribId, text, source, fromRunId },
+      { contribId, text, source, fromRunId, slot },
       { seat: seat.seat, tier: seat.tier }
     );
 

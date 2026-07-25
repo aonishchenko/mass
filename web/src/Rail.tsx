@@ -17,6 +17,9 @@ import {
 } from "lucide-react";
 import { perms, type Intent, type SessionView } from "./session";
 import { EnsPanel } from "./Ens";
+import { BuildPathPanel, ReadinessHint } from "./BuildPathPanel";
+import type { BuildStep } from "./buildPath";
+import type { Mode } from "./App";
 
 // The one definition lives with the hook that consumes it. A local copy drifted
 // the moment world.tsx grew a field, and the compiler could not see it.
@@ -108,12 +111,67 @@ const Section: FC<{ icon: React.ReactNode; title: string; children: React.ReactN
   </section>
 );
 
+/**
+ * The two ways to work. Presented as a real choice up front rather than a
+ * hidden mode: a crew that knows what it is doing wants to just talk, and a
+ * crew facing a blank page wants to be interviewed.
+ */
+const ModeChoice: FC<{ mode: Mode; setMode: (m: Mode) => void }> = ({ mode, setMode }) => (
+  <div className="border-b border-[#1a1a18]/8 px-4 py-3">
+    <p className="pb-1.5 text-[11px] tracking-wide text-[var(--color-faint)] uppercase">
+      How do you want to work?
+    </p>
+    <div className="grid grid-cols-2 gap-1.5">
+      {(
+        [
+          {
+            id: "freeform" as const,
+            label: "Freeform",
+            blurb: "Just talk. Teach what turns out to matter.",
+          },
+          {
+            id: "workflow" as const,
+            label: "Agent workflow",
+            blurb: "The agent interviews you, step by step.",
+          },
+        ]
+      ).map((m) => (
+        <button
+          key={m.id}
+          onClick={() => setMode(m.id)}
+          aria-pressed={mode === m.id}
+          className={`rounded-md border px-2 py-1.5 text-left transition-colors ${
+            mode === m.id
+              ? "border-[var(--color-accent)]/50 bg-[var(--color-accent)]/10"
+              : "border-[#1a1a18]/15 bg-white/40 hover:bg-white/70"
+          }`}
+        >
+          <span
+            className={`block text-[12px] font-medium ${
+              mode === m.id ? "text-[var(--color-accent)]" : ""
+            }`}
+          >
+            {m.label}
+          </span>
+          <span className="block pt-0.5 text-[10px] leading-tight text-[var(--color-muted)]">
+            {m.blurb}
+          </span>
+        </button>
+      ))}
+    </div>
+  </div>
+);
+
 export const Rail: FC<{
   view: SessionView;
   send: (i: Intent) => void;
   verify: VerifyFn;
   verifying: boolean;
-}> = ({ view, send, verify, verifying }) => {
+  mode: Mode;
+  setMode: (m: Mode) => void;
+  activeStep?: string;
+  onPickStep: (step: BuildStep) => void;
+}> = ({ view, send, verify, verifying, mode, setMode, activeStep, onPickStep }) => {
   const [name, setName] = useState("");
   const [copied, setCopied] = useState(false);
   const [brief, setBrief] = useState("");
@@ -216,6 +274,30 @@ export const Rail: FC<{
           {act.isPending("newSession") ? "Starting…" : "Start a new session"}
         </button>
       </div>
+
+      <ModeChoice mode={mode} setMode={setMode} />
+
+      {/* Freeform still counts: a quiet hint that the twelve slots exist, and
+          that the crew has already filled some of them without being marched
+          through a wizard. */}
+      {mode === "freeform" && (
+        <div className="border-b border-[#1a1a18]/8 px-4 py-1.5 text-center">
+          <ReadinessHint
+            contributions={view.contributions}
+            capTableSize={Object.keys(view.capTable).length}
+          />
+        </div>
+      )}
+
+      {mode === "workflow" && (
+        <BuildPathPanel
+          contributions={view.contributions}
+          capTableSize={Object.keys(view.capTable).length}
+          activeStep={activeStep}
+          onPick={onPickStep}
+          disabled={!seated || view.closed}
+        />
+      )}
 
       {!seated && (
         <div className="border-b border-[#1a1a18]/8 px-4 py-3">

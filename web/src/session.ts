@@ -45,6 +45,8 @@ export interface Contribution {
   contribId: string;
   text: string;
   source: string;
+  /** Build-path step this answers, when the crew follows the workflow. */
+  slot?: string;
   proposedBy: string;
   cosigners: string[];
   state: "proposed" | "challenged" | "accepted" | "rejected";
@@ -195,6 +197,7 @@ function apply(v: SessionView, e: MassEvent): SessionView {
             contribId: p.contribId,
             text: p.text,
             source: p.source,
+            slot: p.slot,
             proposedBy: e.actor.seat ?? "system",
             cosigners: [],
             state: "proposed",

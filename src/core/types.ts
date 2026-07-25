@@ -150,6 +150,12 @@ export interface ContribProposedPayload {
   contribId: string;
   text: string;
   source: ContribSource;
+  /**
+   * Which of the twelve build-path steps this answers, if any. Readiness is
+   * DERIVED by counting accepted contributions per slot — never stored as a
+   * flag, so a step cannot be marked done by assertion (BUILD-PATH.md §2).
+   */
+  slot?: string;
   fromRunId?: string;
   harvestId?: string;
   fromEventId?: string;
@@ -262,7 +268,14 @@ export type Intent =
   /** Re-attach to an existing seat after a reload, using the seat's token. */
   | { kind: "resumeSeat"; token: string }
   | { kind: "instruct"; text: string; lane: Lane }
-  | { kind: "proposeContrib"; text: string; source: ContribSource; fromRunId?: string }
+  | {
+      kind: "proposeContrib";
+      text: string;
+      source: ContribSource;
+      fromRunId?: string;
+      /** Build-path step this answers, when the crew is following the workflow. */
+      slot?: string;
+    }
   | { kind: "challengeContrib"; contribId: string; reason: string }
   | { kind: "cosign"; contribId: string }
   | { kind: "openHarvest" }
@@ -340,6 +353,8 @@ export interface Contribution {
   contribId: string;
   text: string;
   source: ContribSource;
+  /** Build-path step this answers, if the crew was following the workflow. */
+  slot?: string;
   proposedBy: string;
   state: ContribState;
   cosigners: string[];

@@ -126,6 +126,7 @@ export function apply(s: Session, e: MassEvent): Session {
             cosigners: [],
             screened: false,
             harvestId: p.harvestId,
+            slot: p.slot,
           },
         },
       };

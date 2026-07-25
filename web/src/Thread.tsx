@@ -10,11 +10,12 @@ import {
   ThreadPrimitive,
   useMessage,
 } from "@assistant-ui/react";
-import { ArrowUpIcon, ShieldCheckIcon, SproutIcon, ZapIcon } from "lucide-react";
+import { ArrowUpIcon, ShieldCheckIcon, SproutIcon, XIcon, ZapIcon } from "lucide-react";
 import type { FC, ReactNode } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Lane, SessionView } from "./session";
+import type { BuildStep } from "./buildPath";
 
 const CITATION = /(\(per [^)]*'s contribution #\d+\))/g;
 const IS_CITATION = /^\(per .*'s contribution #\d+\)$/;
@@ -178,11 +179,61 @@ const AssistantMessage: FC<{ view: SessionView; onFocusTeach: () => void }> = ({
  * unsealed" per message also welded the UI to one provider's capability; a job
  * is provider-independent.
  */
+
+/**
+ * The interview card — the agent asking for one specific part of itself.
+ *
+ * The workflow doc is emphatic that this is asked ONE QUESTION AT A TIME and
+ * never rendered as a form: the whole point is that it feels like being
+ * interviewed by a colleague. Follow-ups are shown quietly, to be used only if
+ * the first answer is thin.
+ */
+const InterviewCard: FC<{ step: BuildStep; onDismiss: () => void }> = ({ step, onDismiss }) => (
+  <div className="mx-auto mb-3 w-full max-w-3xl rounded-xl border border-[var(--color-accent)]/30 bg-[var(--color-accent)]/8 px-4 py-3">
+    <div className="flex items-start justify-between gap-3">
+      <span className="text-[10px] tracking-wide text-[var(--color-accent)] uppercase">
+        Step {step.order} of 12 · {step.title}
+        {step.earnsOwnership && " · earns ownership"}
+      </span>
+      <button
+        onClick={onDismiss}
+        title="Answer something else instead"
+        className="shrink-0 text-[var(--color-faint)] hover:text-[var(--color-ink)]"
+      >
+        <XIcon size={13} />
+      </button>
+    </div>
+
+    <p className="pt-1.5 text-[15px] leading-snug">{step.ask}</p>
+
+    {step.followUps.length > 0 && (
+      <details className="pt-2">
+        <summary className="cursor-pointer text-[11px] text-[var(--color-muted)]">
+          If that felt thin, it will also ask…
+        </summary>
+        <ul className="list-disc pt-1 pl-4 text-[11.5px] leading-snug text-[var(--color-muted)]">
+          {step.followUps.map((f, i) => (
+            <li key={i}>{f}</li>
+          ))}
+        </ul>
+      </details>
+    )}
+
+    <p className="pt-2 text-[11px] text-[var(--color-faint)]">
+      Answer in your own words, then <em>Teach this</em> on your message. Ticks
+      when the crew approves it. — {step.doneWhen}
+    </p>
+  </div>
+);
+
 export const Thread: FC<{
   view: SessionView;
   seated: boolean;
+  /** The build-path step being answered, when the crew is in workflow mode. */
+  step?: BuildStep;
+  onDismissStep: () => void;
   onTeach: (text: string) => void;
-}> = ({ view, seated, onTeach }) => {
+}> = ({ view, seated, step, onDismissStep, onTeach }) => {
   // "Teach it now" points at the one input there is: focus it and let them type
   // the thing the agent just admitted it does not know.
   const focusComposer = () => {
@@ -220,9 +271,12 @@ export const Thread: FC<{
       />
 
       <div className="sticky bottom-0 mx-auto mt-auto w-full max-w-3xl bg-gradient-to-b from-transparent via-[var(--color-cream)]/85 to-[var(--color-cream)] px-4 pt-4 pb-3">
+        {/* One question at a time — never a form (workflow doc, Part 3). */}
+        {step && <InterviewCard step={step} onDismiss={onDismissStep} />}
+
         {/* Working thing first, explanation second: a new arrival gets one
             concrete thing to try, not a lecture about ownership. */}
-        {seated && view.turns.length === 0 && (
+        {seated && !step && view.turns.length === 0 && (
           <p className="pb-2 text-center text-xs text-[var(--color-muted)]">
             Try: <em>“Review this getting-started page”</em> — or ask it something it
             doesn’t know yet.
@@ -236,9 +290,11 @@ export const Thread: FC<{
             placeholder={
               view.closed
                 ? "session is closed"
-                : seated
-                  ? "Instruct the agent…"
-                  : "Claim a seat to instruct the agent"
+                : !seated
+                  ? "Claim a seat to instruct the agent"
+                  : step
+                    ? `Answer in your own words — ${step.title.toLowerCase()}…`
+                    : "Instruct the agent…"
             }
             className="w-full resize-none bg-transparent px-2 py-1.5 text-[15px] outline-none placeholder:text-[var(--color-faint)] disabled:opacity-50"
           />
