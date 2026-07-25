@@ -6,3 +6,9 @@ web/node_modules/
 *.log
 web/dist/
 *.tsbuildinfo
+# Signing keys downloaded from provider dashboards (the World RP key, etc).
+# A glob, not one filename: the next key will have a different address in its
+# name, and these cannot be regenerated without reconfiguring the app.
+signing-key-*.json
+*.pem
+*.key

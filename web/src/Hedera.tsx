@@ -8,11 +8,18 @@
 
 import { useEffect, useState, type FC } from "react";
 import { ExternalLinkIcon, ShieldIcon } from "lucide-react";
+import { hashscanMessage, useVisible } from "./ui";
 
 interface AnchoredMessage {
   sequenceNumber: number;
   consensusTimestamp: string;
-  payload: { id?: string; type?: string; actorTier?: string; payloadHash?: string };
+  payload: {
+    id?: string;
+    type?: string;
+    actorTier?: string;
+    seat?: string;
+    payloadHash?: string;
+  };
 }
 
 interface HcsResponse {
@@ -37,6 +44,7 @@ const consensusToLocal = (ts: string) =>
 export const HederaPanel: FC<{ eventCount: number }> = ({ eventCount }) => {
   const [hcs, setHcs] = useState<HcsResponse | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
+  const shown = useVisible(10);
 
   // Re-poll when the local log grows: consensus lags a second or two, so an
   // anchor appears here shortly AFTER the event shows in the session log.
@@ -121,27 +129,46 @@ export const HederaPanel: FC<{ eventCount: number }> = ({ eventCount }) => {
       )}
 
       <ol className="space-y-1">
-        {hcs.messages.slice(0, 12).map((m) => (
-          <li
-            key={m.sequenceNumber}
-            className="flex items-baseline justify-between gap-2 border-b border-[#1a1a18]/6 pb-1 last:border-0"
-          >
-            <span className="min-w-0">
-              <span className="text-[var(--color-faint)]">#{m.sequenceNumber}</span>{" "}
-              <span className="font-mono text-[11px]">{m.payload.type}</span>
-            </span>
-            <span
-              className="shrink-0 font-mono text-[10px] text-[var(--color-muted)]"
+        {hcs.messages.slice(0, shown.count).map((m) => (
+          <li key={m.sequenceNumber} className="border-b border-[#1a1a18]/6 pb-1 last:border-0">
+            {/* Every anchored row opens the decoded message on HashScan — the
+                point is that a reader can check us, not take our word. */}
+            <a
+              href={hashscanMessage(m.consensusTimestamp)}
+              target="_blank"
+              rel="noreferrer"
               title={`payloadHash ${m.payload.payloadHash}\nconsensus ${m.consensusTimestamp}`}
+              className="flex items-baseline justify-between gap-2 rounded px-1 -mx-1 hover:bg-white/60"
             >
-              {(m.payload.payloadHash ?? "").slice(0, 8)} · {consensusToLocal(m.consensusTimestamp)}
-            </span>
+              <span className="min-w-0 truncate">
+                <span className="text-[var(--color-faint)]">#{m.sequenceNumber}</span>{" "}
+                <span className="font-mono text-[11px]">{m.payload.type}</span>
+                {m.payload.seat && (
+                  <span className="pl-1 font-mono text-[10px] text-[var(--color-muted)]">
+                    {m.payload.seat.slice(0, 8)}
+                  </span>
+                )}
+              </span>
+              <span className="flex shrink-0 items-center gap-1 font-mono text-[10px] text-[var(--color-muted)]">
+                {consensusToLocal(m.consensusTimestamp)}
+                <ExternalLinkIcon size={9} />
+              </span>
+            </a>
           </li>
         ))}
         {hcs.messages.length === 0 && (
           <li className="text-[11.5px] text-[var(--color-faint)]">nothing anchored yet</li>
         )}
       </ol>
+
+      {hcs.messages.length > shown.count && (
+        <button
+          onClick={shown.more}
+          className="mt-1.5 w-full rounded-md border border-[#1a1a18]/15 py-1 text-[11px] text-[var(--color-muted)] hover:bg-white/60"
+        >
+          Show 10 more ({hcs.messages.length - shown.count} left)
+        </button>
+      )}
     </section>
   );
 };

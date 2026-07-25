@@ -32,8 +32,10 @@
     // app_id + rp_id are filled once the Developer Portal app exists. Blank keeps
     // verification "not configured" (the UI says so). WORLD_RP_PRIVATE_KEY is a
     // SECRET (wrangler secret put), as is WORLD_DEV_FALLBACK if used for rehearsal.
-    "WORLD_APP_ID": "",
-    "WORLD_RP_ID": "",
+    // Public values. worldConfigured() requires BOTH, so real verification stays
+    // off until WORLD_RP_ID is filled too.
+    "WORLD_APP_ID": "app_95c2252f501bcd906cea4fcab43ba5cd",
+    "WORLD_RP_ID": "rp_6374dd7eeced874f",
     "WORLD_ENV": "staging",
     "WORLD_ACTION_SELFIE": "mass-selfie",
     "WORLD_ACTION_AGENTKIT": "mass-agentkit",

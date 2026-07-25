@@ -8,6 +8,7 @@ import { useState, type FC } from "react";
 import {
   CheckIcon,
   DatabaseIcon,
+  ExternalLinkIcon,
   ScrollTextIcon,
   ShieldCheckIcon,
   SproutIcon,
@@ -29,6 +30,7 @@ const TIER: Record<string, { label: string; cls: string }> = {
   T3: { label: "Signer", cls: "bg-emerald-600/18 text-emerald-800" },
 };
 import { HederaPanel } from "./Hedera";
+import { hashscanTx, usePending, useVisible } from "./ui";
 
 const Section: FC<{ icon: React.ReactNode; title: string; children: React.ReactNode }> = ({
   icon,
@@ -53,6 +55,8 @@ export const Rail: FC<{
   const [copied, setCopied] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [delegating, setDelegating] = useState(false);
+  const act = usePending(view);
+  const logShown = useVisible(10);
   const sessionId = new URLSearchParams(location.search).get("session") ?? "default";
   const seats = Object.values(view.seats);
   const seated = !!view.you;
@@ -64,8 +68,12 @@ export const Rail: FC<{
   // Seat claim requires a SERVER-verified Selfie Check; the token is issued only
   // after /api/verify/selfie succeeds. See web/src/world.tsx.
   const claim = async () => {
-    if (!name.trim() || verifying) return;
+    // `verifying` only covers the World round-trip; the seat does not exist
+    // until the server emits seat.claimed. Without act.start() the button
+    // re-enabled in between, and five clicks made five seats.
+    if (!name.trim() || verifying || act.pending) return;
     setAuthError(null);
+    act.start("claim");
     try {
       const r = await verify("selfie");
       send({ kind: "claimSeat", name: name.trim(), selfieToken: r.token });
@@ -76,8 +84,9 @@ export const Rail: FC<{
 
   // Become a Signer: Orb / AgentKit delegation to the session agent.
   const delegate = async () => {
-    if (verifying || delegating) return;
+    if (verifying || delegating || act.pending) return;
     setDelegating(true);
+    act.start("delegate");
     setAuthError(null);
     try {
       const r = await verify("agentkit");
@@ -113,13 +122,14 @@ export const Rail: FC<{
           </button>
         </div>
         <button
-          onClick={() => {
+          onClick={act.guard("newSession", () => {
             const id = Math.random().toString(36).slice(2, 8);
             location.href = `${location.pathname}?session=${id}`;
-          }}
-          className="mt-2 w-full rounded-md border border-[#1a1a18]/20 py-1.5 text-[11.5px] hover:bg-white/60"
+          })}
+          disabled={!!act.pending}
+          className="mt-2 w-full rounded-md border border-[#1a1a18]/20 py-1.5 text-[11.5px] hover:bg-white/60 disabled:opacity-40"
         >
-          Start a new session
+          {act.isPending("newSession") ? "Starting…" : "Start a new session"}
         </button>
       </div>
 
@@ -139,10 +149,10 @@ export const Rail: FC<{
             />
             <button
               onClick={claim}
-              disabled={!name.trim() || verifying}
+              disabled={!name.trim() || verifying || !!act.pending}
               className="rounded-md bg-[var(--color-ink)] px-3 py-1.5 text-[var(--color-cream)] hover:opacity-85 disabled:opacity-40"
             >
-              {verifying ? "Verifying…" : "Verify & join"}
+              {verifying ? "Verifying…" : act.isPending("claim") ? "Joining…" : "Verify & join"}
             </button>
           </div>
           <p className="pt-1.5 text-[11px] leading-snug text-[var(--color-muted)]">
@@ -255,8 +265,10 @@ export const Rail: FC<{
                             : "")}
                     </span>
                     <button
-                      onClick={() => send({ kind: "cosign", contribId: c.contribId })}
-                      disabled={me?.tier !== "T3" || !!mine}
+                      onClick={act.guard(`cosign:${c.contribId}`, () =>
+                        send({ kind: "cosign", contribId: c.contribId })
+                      )}
+                      disabled={me?.tier !== "T3" || !!mine || !!act.pending}
                       title={me?.tier === "T3" ? undefined : "Only Signers (Orb-verified) can co-sign"}
                       className="rounded bg-[var(--color-accent)] px-2 py-1 text-[11px] text-white hover:opacity-85 disabled:opacity-30"
                     >
@@ -298,7 +310,7 @@ export const Rail: FC<{
               out of the conversation so you don't have to flag them as you go.
             </p>
             <button
-              onClick={() => send({ kind: "openHarvest" })}
+              onClick={act.guard("harvest", () => send({ kind: "openHarvest" }))}
               disabled={!seated || view.closed}
               className="w-full rounded-md border border-[#1a1a18]/20 py-1.5 hover:bg-white/50 disabled:opacity-30"
             >
@@ -363,13 +375,19 @@ export const Rail: FC<{
             </ul>
             <div className="flex gap-2 pt-2">
               <button
-                onClick={() => send({ kind: "cosignBatch", harvestId: view.harvestId })}
+                onClick={act.guard("cosignBatch", () =>
+                  send({ kind: "cosignBatch", harvestId: view.harvestId })
+                )}
+                disabled={!!act.pending}
                 className="flex-1 rounded-md bg-[var(--color-accent)] py-1.5 text-white hover:opacity-85"
               >
                 Co-sign batch
               </button>
               <button
-                onClick={() => send({ kind: "cancelHarvest", harvestId: view.harvestId })}
+                onClick={act.guard("cancelHarvest", () =>
+                  send({ kind: "cancelHarvest", harvestId: view.harvestId })
+                )}
+                disabled={!!act.pending}
                 className="rounded-md border border-[#1a1a18]/20 px-2 hover:bg-white/50"
               >
                 Cancel
@@ -383,23 +401,49 @@ export const Rail: FC<{
 
       <Section icon={<ScrollTextIcon size={12} />} title={`Log (${view.events.length})`}>
         <ol className="space-y-0.5 font-mono text-[10.5px] text-[var(--color-muted)]">
-          {[...view.events].reverse().slice(0, 40).map((e) => (
-            <li
-              key={e.id}
-              className="flex justify-between gap-2"
-              title={`payloadHash ${e.payloadHash ?? "-"}\n${JSON.stringify(e.payload)}`}
-            >
-              <span className="truncate">
-                <span className="text-[var(--color-faint)]">#{e.seq}</span> {e.type}
-              </span>
-              {e.payloadHash && (
-                <span className="shrink-0 text-[var(--color-faint)]">
-                  {e.payloadHash.slice(0, 8)}
-                </span>
-              )}
+          {[...view.events].reverse().slice(0, logShown.count).map((e) => (
+            <li key={e.id}>
+              {/* Only rows that actually carry a transaction become links —
+                  a link that goes nowhere is worse than no link. */}
+              {(() => {
+                const txId = (e.payload as { hederaTxId?: string } | undefined)?.hederaTxId;
+                const body = (
+                  <>
+                    <span className="truncate">
+                      <span className="text-[var(--color-faint)]">#{e.seq}</span> {e.type}
+                    </span>
+                    <span className="flex shrink-0 items-center gap-1 text-[var(--color-faint)]">
+                      {e.payloadHash?.slice(0, 8)}
+                      {txId && <ExternalLinkIcon size={9} />}
+                    </span>
+                  </>
+                );
+                const title = `payloadHash ${e.payloadHash ?? "-"}\n${JSON.stringify(e.payload)}`;
+                return txId ? (
+                  <a
+                    href={hashscanTx(txId)}
+                    target="_blank"
+                    rel="noreferrer"
+                    title={title}
+                    className="-mx-1 flex justify-between gap-2 rounded px-1 hover:bg-white/60"
+                  >
+                    {body}
+                  </a>
+                ) : (
+                  <span className="flex justify-between gap-2" title={title}>{body}</span>
+                );
+              })()}
             </li>
           ))}
         </ol>
+        {view.events.length > logShown.count && (
+          <button
+            onClick={logShown.more}
+            className="mt-1.5 w-full rounded-md border border-[#1a1a18]/15 py-1 font-sans text-[11px] hover:bg-white/60"
+          >
+            Show 10 more ({view.events.length - logShown.count} left)
+          </button>
+        )}
       </Section>
 
       <div className="mt-auto px-4 py-3">
@@ -410,8 +454,8 @@ export const Rail: FC<{
         ) : (
           <>
             <button
-              onClick={() => send({ kind: "closeSession" })}
-              disabled={!seated || view.harvestOpen}
+              onClick={act.guard("close", () => send({ kind: "closeSession" }))}
+              disabled={!seated || view.harvestOpen || !!act.pending}
               className="w-full rounded-md border border-[#1a1a18]/25 py-1.5 hover:bg-white/50 disabled:opacity-30"
             >
               Close session — The Birth
