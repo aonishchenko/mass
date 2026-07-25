@@ -29,6 +29,8 @@ const tierLabel: Record<string, string> = {
 
 export const Rail: FC<{ view: SessionView; send: (i: Intent) => void }> = ({ view, send }) => {
   const [name, setName] = useState("");
+  const [copied, setCopied] = useState(false);
+  const sessionId = new URLSearchParams(location.search).get("session") ?? "default";
   const seats = Object.values(view.seats);
   const seated = !!view.you;
   const pending = Object.values(view.contributions).filter((c) => c.state === "proposed");
@@ -36,6 +38,27 @@ export const Rail: FC<{ view: SessionView; send: (i: Intent) => void }> = ({ vie
 
   return (
     <aside className="flex h-full w-[340px] shrink-0 flex-col overflow-y-auto border-l border-[#1a1a18]/10 bg-[#e9e4d6] font-sans text-[13px] text-[var(--color-ink)]">
+      {/*
+        Sessions are keyed by ?session=. Two people on different keys are in
+        different rooms and each thinks the other is silent, which is exactly
+        what happened in testing. Show the room and hand out its link.
+      */}
+      <div className="flex items-center justify-between border-b border-[#1a1a18]/8 bg-[#1a1a18]/4 px-4 py-2">
+        <span className="truncate text-[11px] text-[var(--color-muted)]">
+          room <span className="font-mono text-[var(--color-ink)]">{sessionId}</span>
+        </span>
+        <button
+          onClick={() => {
+            navigator.clipboard?.writeText(location.href);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+          }}
+          className="shrink-0 rounded-md border border-[#1a1a18]/20 px-2 py-1 text-[11px] hover:bg-white/60"
+        >
+          {copied ? "copied ✓" : "Copy invite link"}
+        </button>
+      </div>
+
       {!seated && (
         <div className="border-b border-[#1a1a18]/8 px-4 py-3">
           <label className="text-[11px] tracking-wide text-[var(--color-faint)] uppercase">
@@ -156,8 +179,9 @@ export const Rail: FC<{ view: SessionView; send: (i: Intent) => void }> = ({ vie
         ) : (
           <>
             <p className="pb-2 text-[11.5px] leading-snug text-[var(--color-muted)]">
-              Suggested first — but everything you said is keepable. Keep what the
-              agent should know forever.
+              Everything you said, suggestions first. <strong>Keep</strong> proposes
+              a line for the brain; it only counts once two signers co-sign the
+              batch below.
             </p>
             <ul className="space-y-1.5">
               {[...view.candidates]
@@ -195,8 +219,9 @@ export const Rail: FC<{ view: SessionView; send: (i: Intent) => void }> = ({ vie
                           })
                         }
                         className="rounded bg-[var(--color-ink)] px-2 py-0.5 text-[11px] text-[var(--color-cream)] hover:opacity-85"
+                        title="Propose this line for the agent's brain"
                       >
-                        Keep
+                        Keep →
                       </button>
                     </div>
                   </li>

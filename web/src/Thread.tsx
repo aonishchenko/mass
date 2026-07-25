@@ -43,12 +43,14 @@ const TeachThisButton: FC<{ onTeach: (text: string) => void }> = ({ onTeach }) =
 
   if (!text) return null;
 
+  // Always visible, not hover-only: a hover affordance is invisible on touch and
+  // easy to miss entirely, and this is the primary way anything enters the brain.
   return (
-    <div className="flex justify-end pt-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+    <div className="flex justify-end pt-1.5">
       <button
         onClick={() => onTeach(text)}
         title="Propose this as something the agent keeps forever"
-        className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-[var(--color-muted)] transition-colors hover:bg-[#1a1a18]/5 hover:text-[var(--color-ink)]"
+        className="flex items-center gap-1.5 rounded-md border border-[var(--color-accent)]/35 bg-[var(--color-accent)]/10 px-2.5 py-1 text-xs text-[var(--color-accent)] transition-colors hover:bg-[var(--color-accent)]/20"
       >
         <SproutIcon size={12} /> Teach this
       </button>
@@ -66,7 +68,7 @@ const UserMessage: FC<{ onTeach: (text: string) => void; canTeach: boolean }> = 
   onTeach,
   canTeach,
 }) => (
-  <MessagePrimitive.Root className="group mx-auto w-full max-w-3xl px-4 py-3">
+  <MessagePrimitive.Root className="mx-auto w-full max-w-3xl px-4 py-3">
     <div className="ml-auto w-fit max-w-[80%]">
       <div className="rounded-2xl bg-[#1a1a18]/5 px-4 py-2.5 text-[15px] leading-relaxed">
         <MessagePrimitive.Parts />
