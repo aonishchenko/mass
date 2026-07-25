@@ -45,6 +45,7 @@ export function computePerms(crew: Seat[]): Perms {
 const MIN_TIER: Record<IntentKind, Tier> = {
   claimSeat: "T1",
   resumeSeat: "T1",
+  nameSession: "T2",
   /** Must already be a verified Builder before delegating as a Signer. */
   delegate: "T2",
   instruct: "T2",

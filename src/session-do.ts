@@ -490,6 +490,12 @@ export class SessionRoom extends DurableObject<Env> {
         return this.delegate(intent.agentkitToken, seat!, ws);
       case "resumeSeat":
         return this.resumeSeat(intent.token, ws);
+      case "nameSession":
+        return this.emit(
+          "session.named",
+          { purpose: intent.purpose.slice(0, 120) },
+          { seat: seat!.seat, tier: seat!.tier }
+        );
       case "instruct":
         return this.instruct(intent.text, intent.lane, seat!);
       case "proposeContrib":

@@ -36,6 +36,11 @@ export function apply(s: Session, e: MassEvent): Session {
       return { ...s, created: true, sessionId: p?.sessionId ?? s.sessionId };
     }
 
+    case "session.named": {
+      const p = e.payload as { purpose?: string };
+      return { ...s, purpose: p.purpose?.trim() || s.purpose };
+    }
+
     case "seat.claimed": {
       const p = e.payload as SeatClaimedPayload;
       return {

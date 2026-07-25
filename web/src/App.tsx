@@ -50,8 +50,12 @@ export default function App() {
 
   return (
     <MassRuntimeProvider view={view} send={send}>
-      <div className="flex h-full">
-        <main className="min-w-0 grow">
+      {/*
+        B7: judges browse on phones. Below md the rail stacks BELOW the
+        conversation instead of being cut off, and nothing scrolls sideways.
+      */}
+      <div className="flex h-full flex-col overflow-y-auto md:flex-row md:overflow-hidden">
+        <main className="min-h-[60vh] min-w-0 grow md:min-h-0">
           <Thread
             view={view}
             seated={!!view.you}

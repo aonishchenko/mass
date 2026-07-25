@@ -14,7 +14,7 @@ import { ArrowUpIcon, ShieldCheckIcon, SproutIcon, XIcon, ZapIcon } from "lucide
 import type { FC, ReactNode } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import type { Lane, SessionView } from "./session";
+import type { SessionView } from "./session";
 import type { BuildStep } from "./buildPath";
 
 const CITATION = /(\(per [^)]*'s contribution #\d+\))/g;
@@ -148,10 +148,10 @@ const TeachItNow: FC<{ onFocusTeach: () => void }> = ({ onFocusTeach }) => (
   </button>
 );
 
-const AssistantMessage: FC<{ view: SessionView; onFocusTeach: () => void }> = ({
-  view,
-  onFocusTeach,
-}) => {
+const AssistantMessage: FC<{
+  view: SessionView;
+  onFocusTeach: () => void;
+}> = ({ view, onFocusTeach }) => {
   const text = useMessage((m) =>
     m.content.map((p) => (p.type === "text" ? p.text : "")).join("")
   );
@@ -183,10 +183,9 @@ const AssistantMessage: FC<{ view: SessionView; onFocusTeach: () => void }> = ({
 /**
  * The interview card — the agent asking for one specific part of itself.
  *
- * The workflow doc is emphatic that this is asked ONE QUESTION AT A TIME and
- * never rendered as a form: the whole point is that it feels like being
- * interviewed by a colleague. Follow-ups are shown quietly, to be used only if
- * the first answer is thin.
+ * Asked ONE QUESTION AT A TIME and never rendered as a form: the point is that
+ * it feels like being interviewed by a colleague. Follow-ups stay folded away,
+ * to be used only if the first answer is thin.
  */
 const InterviewCard: FC<{ step: BuildStep; onDismiss: () => void }> = ({ step, onDismiss }) => (
   <div className="mx-auto mb-3 w-full max-w-3xl rounded-xl border border-[var(--color-accent)]/30 bg-[var(--color-accent)]/8 px-4 py-3">
@@ -228,6 +227,7 @@ const InterviewCard: FC<{ step: BuildStep; onDismiss: () => void }> = ({ step, o
 
 export const Thread: FC<{
   view: SessionView;
+
   seated: boolean;
   /** The build-path step being answered, when the crew is in workflow mode. */
   step?: BuildStep;
@@ -244,17 +244,31 @@ export const Thread: FC<{
 
   return (
   <ThreadPrimitive.Root className="flex h-full flex-col bg-[var(--color-cream)] font-serif text-[var(--color-ink)]">
-    <ThreadPrimitive.Viewport className="flex grow flex-col overflow-y-auto pt-10">
+    <ThreadPrimitive.Viewport className="flex grow flex-col overflow-y-auto pt-6 sm:pt-10">
       <ThreadPrimitive.Empty>
-        <div className="mx-auto max-w-3xl px-4 pt-16 text-center">
-          <h1 className="text-3xl">Build your next team member.</h1>
-          <p className="pt-2 text-sm text-[var(--color-muted)]">
-            Together. On the record.
-          </p>
-          <p className="mx-auto max-w-md pt-6 text-[13px] leading-relaxed text-[var(--color-faint)]">
-            Talk to it normally. When you say something it should keep forever,
-            harvest it into the brain — the crew co-signs, and whoever taught it
-            earns a share.
+        <div className="mx-auto max-w-3xl px-4 pt-12 text-center sm:pt-16">
+          <h1 className="text-2xl sm:text-3xl">Build your next team member.</h1>
+          <p className="pt-2 text-sm text-[var(--color-muted)]">Together. On the record.</p>
+
+          {/*
+            A visitor who followed an invite link should learn what this is
+            before being asked for anything. Working thing first, explanation
+            second — the same rule the agent preaches about getting-started pages.
+          */}
+          <p className="mx-auto max-w-md pt-6 text-[13px] leading-relaxed text-[var(--color-muted)]">
+            {seated ? (
+              <>
+                Ask it something it doesn’t know. It will say so honestly — then
+                you can teach it, and it will know next time. Whoever teaches it
+                owns a share of it.
+              </>
+            ) : (
+              <>
+                A crew is teaching <strong>Doc</strong>, {view.purpose ?? "an agent"}.
+                Everything it knows — and who taught each thing — is listed in
+                the crew panel. Join to teach it something yourself.
+              </>
+            )}
           </p>
         </div>
       </ThreadPrimitive.Empty>

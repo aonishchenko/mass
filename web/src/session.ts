@@ -55,6 +55,8 @@ export interface Contribution {
 
 export interface SessionView {
   connected: boolean;
+  /** What the crew said they are building (A4). Falls back in the UI. */
+  purpose?: string;
   you: string | null;
   seats: Record<
     string,
@@ -106,6 +108,8 @@ const EMPTY: SessionView = {
 function apply(v: SessionView, e: MassEvent): SessionView {
   const p = e.payload ?? {};
   switch (e.type) {
+    case "session.named":
+      return { ...v, purpose: p.purpose };
     case "seat.claimed":
       return {
         ...v,
@@ -257,6 +261,19 @@ function apply(v: SessionView, e: MassEvent): SessionView {
 }
 
 export type Intent = Record<string, unknown> & { kind: string };
+
+/**
+ * What the agent is doing right now, derived from the events we already have.
+ *
+ * A colleague has states. It also makes waiting legible: the careful lane is
+ * slower, and "thinking…" explains a pause that a spinner does not.
+ */
+export function agentStatus(view: SessionView): "idle" | "thinking" | "learning" | "answering" {
+  if (view.brainPending) return "learning";
+  const running = view.turns.some((t) => t.running);
+  if (running) return view.turns.some((t) => t.running && t.text.length > 0) ? "answering" : "thinking";
+  return "idle";
+}
 
 /** Seat token is per-room, so two rooms in one browser keep separate seats. */
 const seatKey = (sessionId: string) => `mass:seat:${sessionId}`;

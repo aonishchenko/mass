@@ -16,6 +16,7 @@ export type ContribSource = "composer" | "draft" | "harvest";
 
 export type EventType =
   | "session.created"
+  | "session.named"
   | "seat.claimed"
   | "seat.left"
   | "seat.rejoined"
@@ -89,6 +90,11 @@ export interface SeatClaimedPayload {
   tier: Tier;
   /** ENS subname assigned to this seat (M5). Deterministic; unique per session. */
   ensName?: string;
+}
+
+/** A4: what this crew is building, so a visitor is not met with a room code. */
+export interface SessionNamedPayload {
+  purpose: string;
 }
 
 export interface SelfieOkPayload {
@@ -267,6 +273,8 @@ export type Intent =
   | { kind: "delegate"; agentkitToken: string }
   /** Re-attach to an existing seat after a reload, using the seat's token. */
   | { kind: "resumeSeat"; token: string }
+  /** Say what the crew is building. Any builder may set or correct it. */
+  | { kind: "nameSession"; purpose: string }
   | { kind: "instruct"; text: string; lane: Lane }
   | {
       kind: "proposeContrib";
@@ -372,6 +380,8 @@ export interface Harvest {
 
 export interface Session {
   sessionId: string;
+  /** What the crew is building, in their words. Empty until someone says. */
+  purpose?: string;
   created: boolean;
   closed: boolean;
   seats: Record<string, Seat>;
