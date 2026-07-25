@@ -95,6 +95,14 @@ interface SocketMeta {
   seat: string | null;
 }
 
+/**
+ * How many times an anchor is retried before it stops being retried. At the
+ * 60s backoff ceiling this is roughly five minutes of trying, which outlasts a
+ * sidecar restart but not a sidecar that is simply gone. The row is kept and
+ * still counted afterwards — see alarm().
+ */
+const MAX_ANCHOR_ATTEMPTS = 10;
+
 export class SessionRoom extends DurableObject<Env> {
   private session: Session;
   /** Candidates live in harvest state, not in the log (§7.5.2). */
@@ -341,9 +349,14 @@ export class SessionRoom extends DurableObject<Env> {
   async alarm() {
     if (!hederaEnabled(this.env)) return;
 
+    // Only rows still worth trying. Without the attempts bound, five permanently
+    // failing records would occupy the whole window in rowid order and every
+    // event emitted after them would never be sent — the queue would look busy
+    // while quietly anchoring nothing.
     const rows = this.ctx.storage.sql
       .exec<{ event_id: string; body: string; attempts: number }>(
-        "SELECT event_id, body, attempts FROM pending_anchors ORDER BY rowid LIMIT 5"
+        "SELECT event_id, body, attempts FROM pending_anchors WHERE attempts < ? ORDER BY rowid LIMIT 5",
+        MAX_ANCHOR_ATTEMPTS
       )
       .toArray();
     if (rows.length === 0) return;
@@ -364,25 +377,43 @@ export class SessionRoom extends DurableObject<Env> {
           "UPDATE pending_anchors SET attempts = attempts + 1 WHERE event_id = ?",
           row.event_id
         );
+        const attempts = row.attempts + 1;
         console.error(
-          `[hedera] anchor failed ${event.type} ${event.id} attempt=${row.attempts + 1}:`,
+          `[hedera] anchor failed ${event.type} ${event.id} attempt=${attempts}:`,
           String(err).slice(0, 160)
         );
+        if (attempts >= MAX_ANCHOR_ATTEMPTS) {
+          // Given up on, NOT discarded. The row stays, so the count keeps
+          // reporting it and the UI keeps saying the ledger is missing it —
+          // being permanently wrong out loud beats being quietly wrong.
+          console.error(
+            `[hedera] giving up on ${event.type} ${event.id} after ${attempts} attempts — still counted as unanchored`
+          );
+        }
       }
     }
 
-    // Anything still queued gets another pass, backing off as attempts grow so
-    // a persistently failing sidecar does not spin.
-    const left = this.unanchoredCount();
-    if (left > 0) {
-      const worst = this.ctx.storage.sql
-        .exec<{ n: number }>("SELECT MAX(attempts) AS n FROM pending_anchors")
-        .toArray()[0]?.n ?? 0;
+    // Anything still worth trying gets another pass, backing off as attempts
+    // grow so a persistently failing sidecar does not spin. Rows past the limit
+    // are excluded, so the alarm eventually stops instead of retrying forever.
+    const retryable = this.ctx.storage.sql
+      .exec<{ n: number; worst: number | null }>(
+        "SELECT COUNT(*) AS n, MAX(attempts) AS worst FROM pending_anchors WHERE attempts < ?",
+        MAX_ANCHOR_ATTEMPTS
+      )
+      .toArray()[0];
+
+    if ((retryable?.n ?? 0) > 0) {
+      const worst = retryable?.worst ?? 0;
       await this.ctx.storage.setAlarm(Date.now() + Math.min(60_000, 1000 * 2 ** Math.min(worst, 6)));
     }
   }
 
-  /** Events selected for anchoring that the network has not confirmed yet. */
+  /**
+   * Events selected for anchoring that the network has not confirmed yet —
+   * including the ones we have stopped retrying. They are still missing from
+   * the public ledger, which is the thing being reported.
+   */
   private unanchoredCount(): number {
     return (
       this.ctx.storage.sql

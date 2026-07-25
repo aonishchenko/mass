@@ -281,10 +281,20 @@ Worth stating plainly rather than leaving to be discovered:
   small separate service (`services/zg-storage`). That service holds
   `HEDERA_OPERATOR_KEY` and signs every transaction, and it also holds the 0G
   storage wallet key. It is a single point of failure and a point where you are
-  trusting us. **If it is offline:** anchors and payments fail, are queued, and
-  are retried — the session keeps working, and the UI shows "N records not yet
-  on-chain" until they land. Hedera *reads* do not depend on it: the ticker
-  comes straight from Mirror Node.
+  trusting us. **If it is offline:** the session keeps working, and the two
+  failure modes differ — worth knowing which is which.
+  - *Anchors are durable.* A record selected for the topic is written to a queue
+    before it is sent, and an alarm retries it with backoff after the object
+    hibernates. The UI shows "N records not yet on-chain" until they land. After
+    repeated failures a record stops being retried and stays counted, so it is
+    visibly missing rather than quietly forgotten.
+  - *Per-inference payments are not queued.* A failed payment is logged and
+    dropped; the answer is still produced, and no `payment.executed` event is
+    emitted, so the log never claims a payment that did not happen. Retrying
+    these is not built.
+
+  Hedera *reads* do not depend on the sidecar: the ticker comes straight from
+  Mirror Node.
 - **The session key is ours.** The brain and archive are encrypted before they
   leave the Worker with `SESSION_KEY`, which we hold. Nothing on the 0G network
   is readable without it, and equally nothing is readable *by a contributor*
