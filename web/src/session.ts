@@ -231,59 +231,93 @@ export function useSession(sessionId: string) {
   const ws = useRef<WebSocket | null>(null);
 
   useEffect(() => {
-    const proto = location.protocol === "https:" ? "wss" : "ws";
-    const socket = new WebSocket(`${proto}://${location.host}/ws?session=${sessionId}`);
-    ws.current = socket;
+    let closed = false;
+    let attempt = 0;
+    let retry: ReturnType<typeof setTimeout> | undefined;
 
-    socket.onopen = () => {
-      setView((v) => ({ ...v, connected: true }));
-      // Reclaim the seat we already hold in this room, if any. Without this a
-      // refresh silently drops you to observer, which disables co-signing and
-      // closing the session.
-      const token = localStorage.getItem(seatKey(sessionId));
-      if (token) socket.send(JSON.stringify({ kind: "resumeSeat", token }));
+    const connect = () => {
+      if (closed) return;
+      const proto = location.protocol === "https:" ? "wss" : "ws";
+      const socket = new WebSocket(`${proto}://${location.host}/ws?session=${sessionId}`);
+      ws.current = socket;
+
+      socket.onopen = () => {
+        attempt = 0;
+        setView((v) => ({ ...v, connected: true }));
+        // Reclaim the seat we already hold in this room, if any. Without this a
+        // refresh silently drops you to observer, which disables co-signing and
+        // closing the session.
+        const token = localStorage.getItem(seatKey(sessionId));
+        if (token) socket.send(JSON.stringify({ kind: "resumeSeat", token }));
+      };
+
+      /**
+       * Reconnect, always. A deploy, a laptop sleep or a dropped wifi packet
+       * closes the socket, and without this the page sat there looking normal
+       * while every button silently did nothing. Replay on reconnect means we
+       * lose no state by rebuilding the connection.
+       */
+      socket.onclose = () => {
+        setView((v) => ({ ...v, connected: false }));
+        if (closed) return;
+        const delay = Math.min(500 * 2 ** attempt++, 10_000);
+        retry = setTimeout(connect, delay);
+      };
+
+      socket.onerror = () => socket.close();
+
+      socket.onmessage = (m) => {
+        const f = JSON.parse(m.data);
+
+        if (f.t === "seated") {
+          localStorage.setItem(seatKey(sessionId), f.token);
+        }
+
+        setView((v) => {
+          if (f.t === "seated") return { ...v, you: f.seat };
+          if (f.t === "sync") {
+            // Replay the whole log; both tabs converge by construction.
+            const you = f.you ?? v.you;
+            if (!f.you && !v.you) localStorage.removeItem(seatKey(sessionId));
+            const folded = f.events.reduce(apply, { ...EMPTY, connected: true, you });
+            return { ...folded, events: f.events };
+          }
+          if (f.t === "event") {
+            return { ...apply(v, f.e), events: [...v.events, f.e] };
+          }
+          if (f.t === "delta") {
+            // Wire-only: append to the running turn, never to events.
+            return {
+              ...v,
+              turns: v.turns.map((t) => (t.id === f.runId ? { ...t, text: t.text + f.token } : t)),
+            };
+          }
+          if (f.t === "candidates") {
+            return { ...v, candidates: f.candidates, harvestId: f.harvestId };
+          }
+          if (f.t === "error") return { ...v, error: f.message };
+          return v;
+        });
+      };
     };
-    socket.onclose = () => setView((v) => ({ ...v, connected: false }));
 
-    socket.onmessage = (m) => {
-      const f = JSON.parse(m.data);
-
-      if (f.t === "seated") {
-        localStorage.setItem(seatKey(sessionId), f.token);
-      }
-
-      setView((v) => {
-        if (f.t === "seated") return { ...v, you: f.seat };
-        if (f.t === "sync") {
-          // Replay the whole log; both tabs converge by construction.
-          const you = f.you ?? v.you;
-          if (!f.you && !v.you) localStorage.removeItem(seatKey(sessionId));
-          const folded = f.events.reduce(apply, { ...EMPTY, connected: true, you });
-          return { ...folded, events: f.events };
-        }
-        if (f.t === "event") {
-          return { ...apply(v, f.e), events: [...v.events, f.e] };
-        }
-        if (f.t === "delta") {
-          // Wire-only: append to the running turn, never to events.
-          return {
-            ...v,
-            turns: v.turns.map((t) => (t.id === f.runId ? { ...t, text: t.text + f.token } : t)),
-          };
-        }
-        if (f.t === "candidates") {
-          return { ...v, candidates: f.candidates, harvestId: f.harvestId };
-        }
-        if (f.t === "error") return { ...v, error: f.message };
-        return v;
-      });
+    connect();
+    return () => {
+      closed = true;
+      clearTimeout(retry);
+      ws.current?.close();
     };
-
-    return () => socket.close();
   }, [sessionId]);
 
   const send = useCallback((intent: Intent) => {
-    ws.current?.send(JSON.stringify(intent));
+    const socket = ws.current;
+    // Silently dropping an intent on a closed socket is how "Join does nothing"
+    // happens. Say so instead.
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      setView((v) => ({ ...v, error: "reconnecting — try again in a moment" }));
+      return;
+    }
+    socket.send(JSON.stringify(intent));
   }, []);
 
   const clearError = useCallback(() => setView((v) => ({ ...v, error: undefined })), []);
