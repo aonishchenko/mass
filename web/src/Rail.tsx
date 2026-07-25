@@ -27,6 +27,7 @@ const TIER: Record<string, { label: string; cls: string }> = {
   T2: { label: "Builder", cls: "bg-sky-600/15 text-sky-800" },
   T3: { label: "Signer", cls: "bg-emerald-600/18 text-emerald-800" },
 };
+import { HederaPanel } from "./Hedera";
 
 const Section: FC<{ icon: React.ReactNode; title: string; children: React.ReactNode }> = ({
   icon,
@@ -368,11 +369,24 @@ export const Rail: FC<{
         )}
       </Section>
 
+      <HederaPanel eventCount={view.events.length} />
+
       <Section icon={<ScrollTextIcon size={12} />} title={`Log (${view.events.length})`}>
         <ol className="space-y-0.5 font-mono text-[10.5px] text-[var(--color-muted)]">
           {[...view.events].reverse().slice(0, 40).map((e) => (
-            <li key={e.id} className="truncate" title={JSON.stringify(e.payload)}>
-              <span className="text-[var(--color-faint)]">#{e.seq}</span> {e.type}
+            <li
+              key={e.id}
+              className="flex justify-between gap-2"
+              title={`payloadHash ${e.payloadHash ?? "-"}\n${JSON.stringify(e.payload)}`}
+            >
+              <span className="truncate">
+                <span className="text-[var(--color-faint)]">#{e.seq}</span> {e.type}
+              </span>
+              {e.payloadHash && (
+                <span className="shrink-0 text-[var(--color-faint)]">
+                  {e.payloadHash.slice(0, 8)}
+                </span>
+              )}
             </li>
           ))}
         </ol>

@@ -14,6 +14,8 @@ export interface MassEvent {
   ts: number;
   type: string;
   actor: { seat?: string; tier?: Tier; system?: true; agent?: true };
+  /** Shown in the log so a row can be matched against its HCS anchor by eye. */
+  payloadHash?: string;
   payload?: any;
 }
 
