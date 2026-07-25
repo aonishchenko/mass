@@ -1,15 +1,25 @@
 # Copy to .dev.vars for local dev (gitignored). In prod use `wrangler secret put`.
+#
+# Router keys come from https://pc.testnet.0g.ai -> Dashboard -> API Keys.
+# A key's TRUST MODE is fixed when you create it, so the draft/canonical lane
+# split (shared-session-spec §6) is enforced by using two separate keys.
 
-# 0G Router (testnet). Key from https://pc.testnet.0g.ai -> Dashboard -> API Keys.
+# Trust mode: Standard (all providers). The draft lane — fast, unsealed.
 ZG_ROUTER_KEY=
 
-# Set to "true" once the direct-broker sealed path is wired, so the canonical
-# lane produces a real attestationRef. Set to "required" to make canonical THROW
-# rather than run degraded. Anything else = honest-degraded + honesty banner.
+# Trust mode: Private (TEE enclave). The canonical lane — sealed + attested.
+ZG_ROUTER_KEY_SEALED=
+
+# "true"     -> canonical runs sealed (requires ZG_ROUTER_KEY_SEALED to be set)
+# "required" -> canonical THROWS instead of degrading
+# unset      -> canonical runs degraded and the UI shows the honesty banner
 ZG_SEALED=
 
-# 0G Storage: funded testnet wallet (faucet.0g.ai). No 0x prefix issues — ethers
-# accepts both. Used to sign brain + archive uploads.
+# Private key of a wallet with ON-CHAIN balance on OG Galileo Testnet. Signs 0G
+# Storage uploads (brain + archive), which is separate from Router inference
+# credit — so do not deposit your whole balance into the Router Main Account.
+#
+# SECURITY: use a throwaway wallet. Never one holding real funds on any chain.
 ZG_PRIVATE_KEY=
 
 # First-party encryption secret for brain + archive. Any high-entropy string.

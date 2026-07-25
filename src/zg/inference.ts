@@ -17,12 +17,23 @@ export class SealedUnavailable extends Error {
 
 export interface InferenceEnv {
   ZG_ROUTER_URL: string;
+  /** Router key created with trust mode "Standard" — the draft lane. */
   ZG_ROUTER_KEY?: string;
+  /**
+   * Router key created with trust mode "Private (TEE enclave)" — the canonical
+   * lane. A key's trust mode is fixed at creation, so the lane split is enforced
+   * by using two keys rather than one (§6).
+   */
+  ZG_ROUTER_KEY_SEALED?: string;
   ZG_DRAFT_MODEL: string;
   ZG_CANONICAL_MODEL: string;
-  /** Set once the direct-broker sealed path is wired. Until then canonical is honest-degraded. */
+  /** "true" => canonical is genuinely sealed. "required" => canonical throws rather than degrade. */
   ZG_SEALED?: string;
 }
+
+/** Draft and canonical authenticate with different keys — see ZG_ROUTER_KEY_SEALED. */
+const keyFor = (env: InferenceEnv, lane: Lane): string =>
+  (lane === "canonical" ? env.ZG_ROUTER_KEY_SEALED ?? env.ZG_ROUTER_KEY : env.ZG_ROUTER_KEY) ?? "";
 
 export interface Msg {
   role: "system" | "user" | "assistant";
@@ -72,7 +83,10 @@ export async function runInference(
   brainChunks: BrainChunk[],
   onToken: (token: string) => void
 ): Promise<RunResult> {
-  const sealed = lane === "canonical" && env.ZG_SEALED === "true";
+  // Sealed only if a TEE-enclave key actually exists — a config flag alone must
+  // never be enough to claim attestation (A3 honesty rule).
+  const sealed =
+    lane === "canonical" && env.ZG_SEALED === "true" && !!env.ZG_ROUTER_KEY_SEALED;
 
   if (lane === "canonical" && !sealed) {
     // Honest degradation, not a silent downgrade: the caller surfaces the banner
@@ -87,7 +101,7 @@ export async function runInference(
     method: "POST",
     headers: {
       "content-type": "application/json",
-      authorization: `Bearer ${env.ZG_ROUTER_KEY ?? ""}`,
+      authorization: `Bearer ${keyFor(env, lane)}`,
     },
     body: bodyFor(model, full, true),
   });
@@ -155,7 +169,7 @@ export async function extractCandidates(
     method: "POST",
     headers: {
       "content-type": "application/json",
-      authorization: `Bearer ${env.ZG_ROUTER_KEY ?? ""}`,
+      authorization: `Bearer ${keyFor(env, "draft")}`,
     },
     body: bodyFor(env.ZG_DRAFT_MODEL, messages, false),
   });

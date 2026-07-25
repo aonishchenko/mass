@@ -35,6 +35,7 @@ export interface Env {
   ASSETS: Fetcher;
   ZG_ROUTER_URL: string;
   ZG_ROUTER_KEY?: string;
+  ZG_ROUTER_KEY_SEALED?: string;
   ZG_DRAFT_MODEL: string;
   ZG_CANONICAL_MODEL: string;
   ZG_SEALED?: string;
