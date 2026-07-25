@@ -35,6 +35,8 @@ export interface Turn {
   seatName?: string;
   attestationRef?: string;
   running?: boolean;
+  /** Seat whose instruction produced this turn — drives per-seat run state. */
+  seat?: string;
 }
 
 export interface Contribution {
@@ -59,10 +61,18 @@ export interface SessionView {
   brainPending: boolean;
   archiveRoot?: string;
   candidates: Candidate[];
+  /** instructId -> seat, so a started run can be attributed to its asker. */
+  pendingInstruct?: Record<string, string | undefined>;
   harvestId?: string;
   harvestOpen: boolean;
   closed: boolean;
+  /** Someone is generating — used for indicators, never to disable input. */
   running: boolean;
+  /**
+   * A run *you* started is in flight. Only this may gate your composer: in a
+   * co-steering session another person's run must never lock your keyboard.
+   */
+  runningForYou: boolean;
   error?: string;
 }
 
@@ -79,6 +89,7 @@ const EMPTY: SessionView = {
   harvestOpen: false,
   closed: false,
   running: false,
+  runningForYou: false,
 };
 
 /** The same fold the server does — replay yields identical state (§4). */
@@ -102,6 +113,7 @@ function apply(v: SessionView, e: MassEvent): SessionView {
     case "instruct":
       return {
         ...v,
+        pendingInstruct: { ...(v.pendingInstruct ?? {}), [p.instructId]: e.actor.seat },
         turns: [
           ...v.turns,
           {
@@ -109,28 +121,38 @@ function apply(v: SessionView, e: MassEvent): SessionView {
             role: "user",
             text: p.text,
             lane: p.lane,
+            seat: e.actor.seat,
             seatName: v.seats[e.actor.seat ?? ""]?.name,
           },
         ],
       };
     case "draft.started":
-    case "canonical.started":
+    case "canonical.started": {
+      const seat = v.pendingInstruct?.[p.instructId];
       return {
         ...v,
         running: true,
-        turns: [...v.turns, { id: p.runId, role: "assistant", text: "", lane: p.lane, running: true }],
+        runningForYou: v.runningForYou || (!!seat && seat === v.you),
+        turns: [
+          ...v.turns,
+          { id: p.runId, role: "assistant", text: "", lane: p.lane, running: true, seat },
+        ],
       };
+    }
     case "draft.completed":
-    case "canonical.completed":
+    case "canonical.completed": {
+      const turns = v.turns.map((t) =>
+        t.id === p.runId
+          ? { ...t, text: p.text, running: false, attestationRef: p.attestationRef }
+          : t
+      );
       return {
         ...v,
-        running: false,
-        turns: v.turns.map((t) =>
-          t.id === p.runId
-            ? { ...t, text: p.text, running: false, attestationRef: p.attestationRef }
-            : t
-        ),
+        turns,
+        running: turns.some((t) => t.running),
+        runningForYou: turns.some((t) => t.running && t.seat === v.you),
       };
+    }
     case "contrib.proposed":
       return {
         ...v,

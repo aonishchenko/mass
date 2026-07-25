@@ -35,7 +35,11 @@ export function MassRuntimeProvider({
 }) {
   const runtime = useExternalStoreRuntime({
     messages: view.turns,
-    isRunning: view.running,
+    // Deliberately per-seat, not session-wide: assistant-ui disables the
+    // composer while isRunning is true, so wiring this to the shared session
+    // state let one person's in-flight run lock everybody else's keyboard —
+    // which kills the co-steering beat (MASS-specs A6).
+    isRunning: view.runningForYou,
     convertMessage,
     onNew: async (message: AppendMessage) => {
       const part = message.content[0];

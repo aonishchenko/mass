@@ -162,6 +162,15 @@ export class SessionRoom extends DurableObject<Env> {
     payload: P,
     actor: MassEvent["actor"]
   ): Promise<MassEvent<P>> {
+    // Hash BEFORE claiming a sequence number. Two co-steering humans produce
+    // overlapping runs, and a DO yields at every await — so reading
+    // events.length and then awaiting would let two emits claim the same seq
+    // and collide on the primary key.
+    const hash = await payloadHash(payload);
+
+    // Everything below is synchronous, so it is atomic with respect to other
+    // in-flight handlers: seq assignment, persistence and the in-memory fold
+    // cannot interleave.
     const seq = this.session.events.length + 1;
     const event: MassEvent<P> = {
       id: newId("e"),
@@ -169,7 +178,7 @@ export class SessionRoom extends DurableObject<Env> {
       ts: Date.now(),
       type,
       actor,
-      payloadHash: await payloadHash(payload),
+      payloadHash: hash,
       payload,
     };
 

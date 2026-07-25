@@ -190,7 +190,11 @@ export const Thread: FC<{
           </div>
         </ComposerPrimitive.Root>
         <p className="pt-2 text-center text-xs text-[var(--color-faint)]">
-          {view.connected ? "live session" : "disconnected — reconnecting replays the log"}
+          {!view.connected
+            ? "disconnected — reconnecting replays the log"
+            : view.running && !view.runningForYou
+              ? "someone else is asking — you can still type"
+              : "live session"}
         </p>
       </div>
     </ThreadPrimitive.Viewport>
