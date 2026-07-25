@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/mass-hero.png" alt="MASS — Collectively build your new AI colleague" width="820">
+</p>
+
 # MASS — Multiplayer Agent Session System
 
 > **Build your next team member. Together. On the record.**
