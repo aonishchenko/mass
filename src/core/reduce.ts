@@ -36,7 +36,7 @@ export function apply(s: Session, e: MassEvent): Session {
         ...s,
         seats: {
           ...s.seats,
-          [p.seat]: { seat: p.seat, name: p.name, tier: p.tier, present: true },
+          [p.seat]: { seat: p.seat, name: p.name, tier: p.tier, present: true, ensName: p.ensName },
         },
       };
     }
@@ -187,8 +187,10 @@ export function apply(s: Session, e: MassEvent): Session {
         brainChunks: [
           ...s.brainChunks,
           {
+            // The ENS subname, so the agent cites its teacher by a resolvable
+            // name — "per alice.mass.eth's contribution #7" (M5, ENS-TASK Req 5).
             chunkId: p.contribId,
-            contributor: seatRecord?.name ?? p.seat,
+            contributor: seatRecord?.ensName ?? seatRecord?.name ?? p.seat,
             contribNumber: p.contribNumber,
             content: p.text,
             screened: c.screened,

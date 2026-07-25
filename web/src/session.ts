@@ -56,7 +56,7 @@ export interface SessionView {
   you: string | null;
   seats: Record<
     string,
-    { seat: string; name: string; tier: Tier; sybilScore?: number; present: boolean }
+    { seat: string; name: string; tier: Tier; sybilScore?: number; present: boolean; ensName?: string }
   >;
   /** True once any verification was issued by the DEV fallback (honesty banner). */
   devMode: boolean;
@@ -107,7 +107,10 @@ function apply(v: SessionView, e: MassEvent): SessionView {
     case "seat.claimed":
       return {
         ...v,
-        seats: { ...v.seats, [p.seat]: { seat: p.seat, name: p.name, tier: p.tier, present: true } },
+        seats: {
+          ...v.seats,
+          [p.seat]: { seat: p.seat, name: p.name, tier: p.tier, present: true, ensName: p.ensName },
+        },
       };
     case "seat.left": {
       const s = v.seats[p.seat];

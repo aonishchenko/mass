@@ -38,6 +38,13 @@ import {
   type VerifyKind,
 } from "./world/verify.js";
 import {
+  agentTextRecords,
+  assembleAgentProfile,
+  joinName,
+  resolveName,
+  uniqueSeatLabel,
+} from "./ens/ens.js";
+import {
   anchorEvent,
   hederaEnabled,
   payForInference,
@@ -75,6 +82,13 @@ export interface Env {
   WORLD_SYBIL_THRESHOLD?: string;
   WORLD_RP_PRIVATE_KEY?: string;
   WORLD_DEV_FALLBACK?: string;
+  // ENS (M5) — identity & careers layer. See docs/ENS-TASK.md.
+  ENS_PARENT_NAME?: string;
+  ENS_AGENT_LABEL?: string;
+  ENS_L1_RPC?: string;
+  ENS_CHAIN?: string;
+  ENS_DURIN_REGISTRY?: string;
+  ENS_DEV_FALLBACK?: string;
 }
 
 interface SocketMeta {
@@ -158,6 +172,16 @@ export class SessionRoom extends DurableObject<Env> {
     if (url.pathname.endsWith("/verify/selfie")) return this.handleVerify(request, "selfie");
     if (url.pathname.endsWith("/verify/agentkit")) return this.handleVerify(request, "agentkit");
     if (url.pathname.endsWith("/verify/log")) return this.handleVerifyLog();
+
+    // ENS (M5) — resolve any name, or the agent's live employment record (CV).
+    if (url.pathname.endsWith("/ens/resolve")) {
+      return Response.json(await resolveName(this.env, url.searchParams.get("name") ?? ""));
+    }
+    if (url.pathname.endsWith("/ens/cv") || url.pathname.endsWith("/ens/agent")) {
+      const profile = assembleAgentProfile(this.session, this.env);
+      const resolved = await resolveName(this.env, url.searchParams.get("name") || profile.name);
+      return Response.json({ profile, records: agentTextRecords(profile), resolved });
+    }
 
     if (request.headers.get("Upgrade") !== "websocket") {
       return new Response("expected websocket", { status: 426 });
@@ -375,7 +399,15 @@ export class SessionRoom extends DurableObject<Env> {
     }
 
     const seatId = newId("s");
-    await this.emit("seat.claimed", { seat: seatId, name, tier: "T1" }, { system: true });
+    // Assign a unique ENS subname now (M5) so the seat has a resolvable identity
+    // from the first event — zero hex anywhere in the UI.
+    const takenLabels = new Set(
+      Object.values(this.session.seats)
+        .map((st) => st.ensName?.split(".")[0])
+        .filter((l): l is string => Boolean(l))
+    );
+    const ensName = joinName(uniqueSeatLabel(name, takenLabels), this.env);
+    await this.emit("seat.claimed", { seat: seatId, name, tier: "T1", ensName }, { system: true });
 
     // Sybil score gates capability (HARD REQUIREMENT 2): below threshold the seat
     // is an Observer — a verified human, but not trusted to propose, co-sign, or

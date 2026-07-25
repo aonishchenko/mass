@@ -14,6 +14,7 @@ import {
   UsersIcon,
 } from "lucide-react";
 import { perms, type Intent, type SessionView } from "./session";
+import { EnsPanel } from "./Ens";
 
 type VerifyFn = (kind: "selfie" | "agentkit") => Promise<{
   token: string;
@@ -161,12 +162,19 @@ export const Rail: FC<{
                 key={s.seat}
                 className={`flex items-center justify-between ${s.present ? "" : "opacity-45"}`}
               >
-                <span className={s.seat === view.you ? "font-semibold" : ""}>
-                  {s.name}
-                  {s.seat === view.you && " (you)"}
-                  {!s.present && <span className="text-[10px] text-[var(--color-faint)]"> · away</span>}
+                <span className="min-w-0">
+                  <span className={s.seat === view.you ? "font-semibold" : ""}>
+                    {s.name}
+                    {s.seat === view.you && " (you)"}
+                    {!s.present && <span className="text-[10px] text-[var(--color-faint)]"> · away</span>}
+                  </span>
+                  {s.ensName && (
+                    <span className="block truncate font-mono text-[10px] text-[var(--color-muted)]">
+                      {s.ensName}
+                    </span>
+                  )}
                 </span>
-                <span className="flex items-center gap-1.5">
+                <span className="flex shrink-0 items-center gap-1.5">
                   {s.sybilScore !== undefined && (
                     <span
                       title="World sybil score (0–1), derived from credential strength. Below the app threshold a seat is Observer-only."
@@ -218,6 +226,8 @@ export const Rail: FC<{
         )}
         {authError && seated && <p className="pt-1 text-[11px] text-red-700">{authError}</p>}
       </Section>
+
+      <EnsPanel sessionId={sessionId} closed={view.closed} />
 
       <Section icon={<SproutIcon size={12} />} title="Awaiting co-sign">
         {pending.length === 0 && (

@@ -72,10 +72,12 @@ export default {
       return Response.json(stats);
     }
 
-    // WebSocket, session state, and World verification all route to the single
-    // writer for the session. /api/verify/* is the M3 server-side proof gate.
+    // WebSocket, session state, World verification, and ENS resolution all route
+    // to the single writer for the session. /api/verify/* is the M3 proof gate;
+    // /api/ens/* is the M5 identity layer.
     const isVerify = url.pathname.startsWith("/api/verify/");
-    if (url.pathname === "/ws" || url.pathname === "/api/state" || isVerify) {
+    const isEns = url.pathname.startsWith("/api/ens/");
+    if (url.pathname === "/ws" || url.pathname === "/api/state" || isVerify || isEns) {
       const search = url.searchParams;
       if (!search.get("session")) search.set("session", "default");
       const sessionId = search.get("session")!;
@@ -89,6 +91,12 @@ export default {
       return env.SESSION.getByName(sessionId).fetch(
         new Request(`https://do${doPath}?${search.toString()}`, request)
       );
+    }
+
+    // Public CV route (M5): serve the SPA shell for /cv/<name> so the client can
+    // render an agent's employment record resolved from ENS. The URL is kept.
+    if (url.pathname.startsWith("/cv/")) {
+      return env.ASSETS.fetch(new Request(new URL("/", url), request));
     }
 
     return env.ASSETS.fetch(request);

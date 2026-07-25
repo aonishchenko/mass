@@ -87,6 +87,8 @@ export interface SeatClaimedPayload {
   seat: string;
   name: string;
   tier: Tier;
+  /** ENS subname assigned to this seat (M5). Deterministic; unique per session. */
+  ensName?: string;
 }
 
 export interface SelfieOkPayload {
@@ -309,6 +311,8 @@ export interface Seat {
   tier: Tier;
   present: boolean;
   sybilScore?: number;
+  /** ENS subname (M5) — the seat's resolvable identity; zero-hex everywhere. */
+  ensName?: string;
   /** World nullifier of the Selfie proof (audit; opaque, no PII). */
   nullifierHash?: string;
   /** AgentKit / Orb delegation reference, set when the seat becomes a Signer. */

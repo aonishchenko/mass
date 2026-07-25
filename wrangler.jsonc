@@ -37,6 +37,12 @@
     "WORLD_ENV": "staging",
     "WORLD_ACTION_SELFIE": "mass-selfie",
     "WORLD_ACTION_AGENTKIT": "mass-agentkit",
-    "WORLD_SYBIL_THRESHOLD": "0.5"
+    "WORLD_SYBIL_THRESHOLD": "0.5",
+
+    // ENS (M5) — identity & careers. See docs/ENS-TASK.md. ENS_PARENT_NAME +
+    // ENS_L1_RPC enable live resolution; blank runs the deterministic dev names.
+    "ENS_PARENT_NAME": "",
+    "ENS_AGENT_LABEL": "docs",
+    "ENS_CHAIN": "mainnet"
   }
 }

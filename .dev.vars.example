@@ -53,6 +53,20 @@ WORLD_SYBIL_THRESHOLD=0.5
 # banner. NEVER set this in a judged/production deployment.
 WORLD_DEV_FALLBACK=1
 
+# --- ENS (M5): identity & careers layer. See docs/ENS-TASK.md ---
+#
+# The crew/session parent name (you own it; seats become <label>.<parent>).
+ENS_PARENT_NAME=
+# L1 RPC for CCIP-Read resolution (Alchemy/Infura/public). Enables live resolve.
+ENS_L1_RPC=
+# "mainnet" | "sepolia" — where the parent name lives.
+ENS_CHAIN=mainnet
+# Durin L2 registry address (real subname issuance). Optional for the demo.
+ENS_DURIN_REGISTRY=
+# "1" → deterministic dev names + a working CV page WITHOUT a deployed registry.
+# Names still show everywhere (zero hex); resolution is synthesized, not live.
+ENS_DEV_FALLBACK=1
+
 # ---- Hedera (hedera-spec.md §3) ----
 # From https://portal.hedera.com/dashboard (Testnet).
 #   HEDERA_OPERATOR_ID  = the "Account ID" field, e.g. 0.0.9704601
