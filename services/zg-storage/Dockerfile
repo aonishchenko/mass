@@ -12,7 +12,9 @@ COPY package.json ./
 # The SDK peer-depends on ethers 6.13.1 exactly — package.json pins it.
 RUN npm install --omit=dev
 
-COPY index.mjs ./
+# Every module, not just the entrypoint. Copying index.mjs alone left
+# hedera.mjs out of the image and the container crashed on its import.
+COPY *.mjs ./
 
 ENV PORT=8080
 EXPOSE 8080
