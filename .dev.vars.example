@@ -60,12 +60,14 @@ WORLD_DEV_FALLBACK=1
 
 # --- ENS (M5): identity & careers layer. See docs/ENS-TASK.md ---
 #
-# The crew/session parent name (you own it; seats become <label>.<parent>).
+# The crew/session parent name — MUST be one you own. Seats become
+# <label>.<parent>. No default: we never display a name we do not control.
+# Register a free Sepolia name at https://sepolia.app.ens.domains
 ENS_PARENT_NAME=
 # L1 RPC for CCIP-Read resolution (Alchemy/Infura/public). Enables live resolve.
 ENS_L1_RPC=
-# "mainnet" | "sepolia" — where the parent name lives.
-ENS_CHAIN=mainnet
+# "mainnet" | "sepolia" — where the parent name lives. We use sepolia.
+ENS_CHAIN=sepolia
 # Durin L2 registry address (real subname issuance). Optional for the demo.
 ENS_DURIN_REGISTRY=
 # "1" → deterministic dev names + a working CV page WITHOUT a deployed registry.
@@ -94,3 +96,10 @@ HEDERA_INFERENCE_PRICE_HBAR=0.1
 
 # Set after the first mintCapTable().
 HEDERA_CAPTABLE_TOKEN_ID=
+
+# --- ERC-8004 (agent registry) + ENSIP-25 (name <-> registry link) ---
+# Filled once the agent is registered. Until all three are set, no ENSIP-25
+# record is published — we never link to a registry entry that does not exist.
+ERC8004_CHAIN_ID=84532
+ERC8004_REGISTRY=
+ERC8004_AGENT_ID=

@@ -16,6 +16,7 @@
  */
 
 import { capTable } from "../core/reduce.js";
+import { agentRegistrationKey } from "./erc7930.js";
 import type { Session } from "../core/types.js";
 
 // ---------------------------------------------------------------------------
@@ -33,6 +34,15 @@ export interface EnsEnv {
   ENS_CHAIN?: string;
   /** Durin L2 registry address (real subname issuance). */
   ENS_DURIN_REGISTRY?: string;
+  /** ERC-8004 Identity Registry this agent is registered in (address). */
+  ERC8004_REGISTRY?: string;
+  /** Chain id of that registry, e.g. 84532 for Base Sepolia. */
+  ERC8004_CHAIN_ID?: string;
+  /** The agent's id (ERC-721 token id) in that registry. */
+  ERC8004_AGENT_ID?: string;
+  /** Read only to decide whether a TEE trust model may honestly be claimed. */
+  ZG_SEALED?: string;
+  ZG_ATTESTATION_URL?: string;
   /** "1" → deterministic dev names/records; never resolves the network. */
   ENS_DEV_FALLBACK?: string;
   // Read for the profile (already on the DO Env):
@@ -40,15 +50,29 @@ export interface EnsEnv {
   HEDERA_CAPTABLE_TOKEN_ID?: string;
 }
 
-export const DEFAULT_PARENT = "mass.eth";
-
-/** Real resolution needs a parent name and an L1 RPC. */
-export function ensConfigured(env: EnsEnv): boolean {
-  return Boolean(env.ENS_PARENT_NAME && env.ENS_L1_RPC);
+/**
+ * There is deliberately NO default parent name.
+ *
+ * A hardcoded fallback of "mass.eth" shipped names like `alice.mass.eth` to
+ * production — and mass.eth is a real mainnet name owned by someone else
+ * (0xaEA5…0deC). We were displaying subnames of a stranger's domain, and only
+ * that owner could ever issue them.
+ *
+ * A name we do not control is worse than no name: it is a claim we cannot
+ * back. When no parent is configured the product says its identity layer is
+ * unconfigured, and shows no name at all.
+ */
+export function parentName(env: EnsEnv): string | undefined {
+  const p = env.ENS_PARENT_NAME?.trim();
+  return p ? p : undefined;
 }
 
-export function parentName(env: EnsEnv): string {
-  return env.ENS_PARENT_NAME || DEFAULT_PARENT;
+/** True once a parent name we own is configured. */
+export const ensNamed = (env: EnsEnv): boolean => Boolean(parentName(env));
+
+/** Real resolution additionally needs an RPC for the chain the name lives on. */
+export function ensConfigured(env: EnsEnv): boolean {
+  return Boolean(parentName(env) && env.ENS_L1_RPC);
 }
 
 // ---------------------------------------------------------------------------
@@ -72,8 +96,10 @@ export function toLabel(name: string): string {
   return base || "anon";
 }
 
-export function joinName(label: string, env: EnsEnv): string {
-  return `${label}.${parentName(env)}`;
+/** A seat's subname, or undefined when we own no parent to put it under. */
+export function joinName(label: string, env: EnsEnv): string | undefined {
+  const parent = parentName(env);
+  return parent ? `${label}.${parent}` : undefined;
 }
 
 /**
@@ -85,8 +111,13 @@ export function joinName(label: string, env: EnsEnv): string {
  * not been named yet: one label baked into a deployment cannot be right for
  * every session that deployment runs.
  */
-export function agentName(env: EnsEnv, session?: Pick<Session, "agentEnsName">): string {
-  return session?.agentEnsName || `${env.ENS_AGENT_LABEL || "docs"}.${parentName(env)}`;
+export function agentName(
+  env: EnsEnv,
+  session?: Pick<Session, "agentEnsName">
+): string | undefined {
+  if (session?.agentEnsName) return session.agentEnsName;
+  const parent = parentName(env);
+  return parent ? `${env.ENS_AGENT_LABEL || "docs"}.${parent}` : undefined;
 }
 
 /**
@@ -127,7 +158,8 @@ export interface ProfileOwner {
 }
 
 export interface AgentProfile {
-  name: string; // docs.mass.eth
+  /** Undefined when no parent name is configured — we never invent one. */
+  name?: string;
   role: string;
   description: string;
   skills: string[];
@@ -187,12 +219,37 @@ export function assembleAgentProfile(session: Session, env: EnsEnv): AgentProfil
   };
 }
 
-/** The text-record set MASS would publish on the agent name (ENSIP-5 keys). */
-export function agentTextRecords(profile: AgentProfile): Record<string, string> {
+/**
+ * The text records published on the agent's name.
+ *
+ * This is the part that makes ENS load-bearing rather than decorative. Under
+ * ENSIP-26 the agent's ENDPOINTS live in its ENS records, so resolving the name
+ * is the only way to reach it: no record, no reachable agent, no job, no
+ * payment, nothing to split to the humans who taught it.
+ *
+ *   ENSIP-26  agent-context, agent-endpoint[<protocol>]   discovery
+ *   ENSIP-25  agent-registration[<registry>][<agentId>]   link to ERC-8004
+ *   ENSIP-5   name, description, url, avatar              the human-facing basics
+ *
+ * Returns {} when we own no name — we publish nothing under a domain we do not
+ * control.
+ */
+export function agentTextRecords(
+  profile: AgentProfile,
+  opts: {
+    /** Public origin the endpoints live on, e.g. https://mass.example.workers.dev */
+    origin?: string;
+    /** ERC-8004 registration, once the agent is registered. */
+    registration?: { chainId: number; registry: string; agentId: string | number };
+  } = {}
+): Record<string, string> {
+  if (!profile.name) return {};
+  const origin = opts.origin?.replace(/\/$/, "") ?? "";
+
   return {
     name: profile.name,
     description: profile.description,
-    url: `/cv/${profile.name}`,
+    url: `${origin}/cv/${profile.name}`,
     "com.mass.role": profile.role,
     "com.mass.skills": profile.skills.join(", "),
     "com.mass.session": profile.session,
@@ -201,7 +258,51 @@ export function agentTextRecords(profile: AgentProfile): Record<string, string> 
     ...(profile.hcsTopic ? { "com.mass.hcs.topic": profile.hcsTopic } : {}),
     ...(profile.capTableToken ? { "com.mass.capTable.token": profile.capTableToken } : {}),
     "com.mass.owners": profile.owners.map((o) => `${o.name}:${o.shareBps}`).join(","),
+
+    // --- ENSIP-26: how anything on the network finds and connects to it -----
+    // Deliberately the whole story in one string: what it is, who owns it, and
+    // what it is paid in. A client reads this before choosing a protocol.
+    "agent-context": agentContext(profile),
+    // Only endpoints that actually answer. An MCP endpoint was advertised here
+    // before one existed: a record pointing at a 404 is the same class of claim
+    // as a self-issued attestation, and this record set is the one thing a
+    // stranger is asked to trust. Both of these carry the session, because the
+    // agent lives in one room and a name alone cannot say which.
+    "agent-endpoint[web]": `${origin}/cv/${profile.name}?session=${encodeURIComponent(profile.session)}`,
+    "agent-endpoint[a2a]": `${origin}/api/agent/${profile.name}?session=${encodeURIComponent(profile.session)}`,
+
+    // --- ENSIP-25: the bidirectional link to the ERC-8004 registry entry ----
+    // Only written once a registration genuinely exists. The value is "1";
+    // any non-empty value confirms the association.
+    ...(opts.registration
+      ? {
+          [agentRegistrationKey(
+            opts.registration.chainId,
+            opts.registration.registry,
+            opts.registration.agentId
+          )]: "1",
+        }
+      : {}),
   };
+}
+
+/**
+ * The one-line description a client reads first (ENSIP-26 `agent-context`).
+ * Built from what actually happened in the session — never a fixed blurb.
+ */
+export function agentContext(profile: AgentProfile): string {
+  const owners = profile.owners.length
+    ? ` Owned by ${profile.owners
+        .map((o) => `${o.name} ${(o.shareBps / 100).toFixed(0)}%`)
+        .join(", ")}.`
+    : "";
+  const taught = ` Taught ${profile.contributionCount} thing${
+    profile.contributionCount === 1 ? "" : "s"
+  } by ${profile.crewSize} verified human${profile.crewSize === 1 ? "" : "s"}.`;
+  // The description may already end with the citation promise (the generic one
+  // does), and reading it twice in the first thing a client sees is sloppy.
+  const cites = /cites its teachers/i.test(profile.description) ? "" : " Cites its teachers.";
+  return `${profile.description}${taught}${owners}${cites} Paid in HBAR on Hedera testnet.`;
 }
 
 // ---------------------------------------------------------------------------
@@ -284,4 +385,73 @@ export async function resolveName(env: EnsEnv, name: string): Promise<ResolvedNa
       error: err instanceof Error ? err.message : String(err),
     };
   }
+}
+
+
+// ---------------------------------------------------------------------------
+// ERC-8004 + ENSIP-27
+// ---------------------------------------------------------------------------
+
+/**
+ * The agent's ERC-8004 registration, if it has one.
+ *
+ * Absent until the agent is genuinely registered — we never publish an
+ * ENSIP-25 link to an entry that does not exist.
+ */
+export function registration(
+  env: EnsEnv
+): { chainId: number; registry: string; agentId: string } | undefined {
+  const chainId = Number(env.ERC8004_CHAIN_ID);
+  if (!env.ERC8004_REGISTRY || !env.ERC8004_AGENT_ID || !Number.isFinite(chainId)) {
+    return undefined;
+  }
+  return { chainId, registry: env.ERC8004_REGISTRY, agentId: env.ERC8004_AGENT_ID };
+}
+
+/**
+ * ENSIP-27 agent card, served at /.well-known/agent.json.
+ *
+ * Completes the discovery chain that ENSIP-26 starts:
+ *   name -> agent-context -> agent-endpoint[...] -> THIS -> ERC-8004 entry.
+ *
+ * `trustModels` states only what we can actually back. A TEE attestation is
+ * claimed ONLY when sealed runs really produce one, because a trust signal we
+ * cannot evidence is worse than none (MASS-specs A3).
+ */
+export function agentCard(session: Session, env: EnsEnv, origin: string) {
+  const profile = assembleAgentProfile(session, env);
+  const reg = registration(env);
+  const sealed = env.ZG_SEALED === "true" && Boolean(env.ZG_ATTESTATION_URL);
+
+  return {
+    schema_version: "1",
+    name: profile.name ?? "unregistered agent",
+    description: profile.description,
+    url: `${origin}/api/agent/${profile.name ?? ""}?session=${encodeURIComponent(session.sessionId)}`,
+    provider: { name: "MASS", url: origin },
+    version: "0.1.0",
+    capabilities: { streaming: true, citations: true },
+    authentication: { schemes: ["none"] },
+    skills: profile.skills.map((s) => ({ id: s.replace(/\s+/g, "-"), name: s })),
+
+    ...(reg
+      ? { erc8004: { registry: reg.registry, agentId: reg.agentId, chainId: reg.chainId } }
+      : {}),
+
+    /**
+     * MASS's own extension: an agent here is co-owned, and that is the whole
+     * point of the product. The standard has no field for it yet, so we state
+     * it explicitly rather than hide it.
+     */
+    ownership: {
+      model: "contribution-share",
+      basis: "accepted contributions per verified human",
+      owners: profile.owners,
+      ledger: profile.hcsTopic ? { chain: "hedera-testnet", topic: profile.hcsTopic } : undefined,
+    },
+
+    trustModels: sealed ? ["tee-attestation"] : [],
+    x402Support: Boolean(profile.hcsTopic),
+    active: profile.availability === "for-hire",
+  };
 }

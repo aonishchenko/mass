@@ -38,8 +38,10 @@ import {
   type VerifyKind,
 } from "./world/verify.js";
 import {
+  agentCard,
   agentTextRecords,
   assembleAgentProfile,
+  registration,
   joinName,
   resolveName,
   uniqueSeatLabel,
@@ -210,9 +212,35 @@ export class SessionRoom extends DurableObject<Env> {
       return Response.json(await resolveName(this.env, url.searchParams.get("name") ?? ""));
     }
     if (url.pathname.endsWith("/ens/cv") || url.pathname.endsWith("/ens/agent")) {
-      const profile = assembleAgentProfile(this.session, this.env);
-      const resolved = await resolveName(this.env, url.searchParams.get("name") || profile.name);
-      return Response.json({ profile, records: agentTextRecords(profile), resolved });
+      const profile = assembleAgentProfile(this.forRequest(url), this.env);
+      const origin = this.publicOrigin(url);
+      const asked = url.searchParams.get("name") || profile.name;
+      const resolved = asked
+        ? await resolveName(this.env, asked)
+        : { name: "", address: null, verified: false, records: {}, dev: false,
+            error: "ENS not configured — no parent name is owned by this deployment" };
+      return Response.json({
+        profile,
+        records: agentTextRecords(profile, { origin, registration: registration(this.env) }),
+        resolved,
+      });
+    }
+
+    /**
+     * ENSIP-27 agent card. ENSIP-26 says a client resolves the name and follows
+     * `agent-endpoint[...]`; this is the document it arrives at, and it carries
+     * the ERC-8004 anchor so the identity can be checked on-chain.
+     */
+    // Served at /.well-known/agent.json and at the a2a endpoint the ENS record
+    // advertises. Both have to answer: the record is the only route to the
+    // agent, so a 404 here is the agent being unreachable.
+    if (url.pathname.endsWith("/agent-card") || url.pathname.startsWith("/agent/")) {
+      // A card can be fetched before anyone has opened the room, and bootstrap
+      // only runs on /ws — so the session would introduce itself as "pending".
+      // The id being asked for is the truthful answer.
+      return Response.json(agentCard(this.forRequest(url), this.env, this.publicOrigin(url)), {
+        headers: { "cache-control": "no-store" },
+      });
     }
 
     if (request.headers.get("Upgrade") !== "websocket") {
@@ -462,6 +490,28 @@ export class SessionRoom extends DurableObject<Env> {
       { agentName: name, purpose: said, agentEnsName },
       { seat: seat.seat, tier: seat.tier }
     );
+  }
+
+  /**
+   * The origin a stranger reaches us on. The Worker forwards it, because the DO
+   * only ever sees https://do — and every URL we publish in an ENS record or an
+   * agent card is one somebody else has to be able to fetch.
+   */
+  private publicOrigin(url: URL): string {
+    return url.searchParams.get("origin") || url.origin;
+  }
+
+  /**
+   * The session as a public reader should see it.
+   *
+   * These routes can be fetched before anyone has opened the room, and
+   * bootstrap only runs on /ws — so the agent would publish endpoint URLs
+   * carrying `session=pending`, which lead nowhere. The id being asked for is
+   * the truthful answer.
+   */
+  private forRequest(url: URL): Session {
+    if (this.session.sessionId !== "pending") return this.session;
+    return { ...this.session, sessionId: url.searchParams.get("session") ?? "default" };
   }
 
   private broadcast(frame: Frame) {

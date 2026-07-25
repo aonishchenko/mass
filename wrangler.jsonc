@@ -44,10 +44,22 @@
     "WORLD_ACTION_AGENTKIT": "mass-agentkit",
     "WORLD_SYBIL_THRESHOLD": "0.5",
 
-    // ENS (M5) — identity & careers. See docs/ENS-TASK.md. ENS_PARENT_NAME +
-    // ENS_L1_RPC enable live resolution; blank runs the deterministic dev names.
+    // ENS (M5) — identity & careers. See ENS-MANUAL.md.
+    //
+    // ENS_PARENT_NAME must be a name THIS TEAM OWNS. There is no default: a
+    // hardcoded "mass.eth" once shipped subnames of a stranger's domain to
+    // production. Blank means the agent simply has no public identity.
+    //
+    // We run on SEPOLIA (L1 name) with subnames issued on BASE SEPOLIA (L2),
+    // so the whole flow is testnet and free. See ENS-BASE-SEPOLIA-GUIDE.md.
     "ENS_PARENT_NAME": "",
-    "ENS_AGENT_LABEL": "docs",
-    "ENS_CHAIN": "mainnet"
+    "ENS_AGENT_LABEL": "doc",
+    "ENS_CHAIN": "sepolia",
+
+    // ERC-8004 identity registry the agent is registered in, and its id there.
+    // Filled after registration; until then no ENSIP-25 link is published.
+    "ERC8004_CHAIN_ID": "84532",
+    "ERC8004_REGISTRY": "",
+    "ERC8004_AGENT_ID": ""
   }
 }

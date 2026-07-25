@@ -59,6 +59,16 @@ export function Cv({ name }: { name: string }) {
   if (!data) return <Shell><p className="text-[var(--color-muted)]">Resolving {name}…</p></Shell>;
 
   const { profile: p, resolved } = data;
+  if (!p.name) {
+    return (
+      <Shell>
+        <p className="text-[var(--color-muted)]">
+          This deployment has no ENS name configured, so there is no public
+          identity to show yet.
+        </p>
+      </Shell>
+    );
+  }
 
   return (
     <Shell>

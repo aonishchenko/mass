@@ -27,7 +27,22 @@ export const EnsPanel: FC<{ sessionId: string; closed: boolean }> = ({ sessionId
     };
   }, [sessionId, closed]);
 
-  if (!data?.profile?.name) return null;
+  // No parent name owned by this deployment => no identity to show. We say so
+  // rather than inventing a name under a domain we do not control.
+  if (!data?.profile) return null;
+  if (!data.profile.name) {
+    return (
+      <section className="border-b border-[#1a1a18]/8 px-4 py-3">
+        <h2 className="flex items-center gap-1.5 pb-2 text-[11px] tracking-wide text-[var(--color-faint)] uppercase">
+          <BadgeCheckIcon size={12} /> Agent identity (ENS)
+        </h2>
+        <p className="text-[11.5px] leading-snug text-[var(--color-muted)]">
+          No ENS name configured for this deployment, so the agent has no public
+          identity yet. See <span className="font-mono">ENS-MANUAL.md</span>.
+        </p>
+      </section>
+    );
+  }
   const { profile, resolved } = data;
 
   return (
