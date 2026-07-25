@@ -44,13 +44,16 @@ interface Stats {
 const consensusToLocal = (ts: string) =>
   new Date(Number(ts.split(".")[0]) * 1000).toLocaleTimeString();
 
-export const HederaPanel: FC<{ eventCount: number; anchorable: number }> = ({
-  eventCount,
-  anchorable,
-}) => {
+export const HederaPanel: FC<{
+  eventCount: number;
+  anchorable: number;
+  /** This session's event ids, used to show only our own anchors. */
+  eventIds: string[];
+}> = ({ eventCount, anchorable, eventIds }) => {
   const [hcs, setHcs] = useState<HcsResponse | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
   const shown = useVisible(10);
+  const [scope, setScope] = useState<"session" | "topic">("session");
   const sessionId = new URLSearchParams(location.search).get("session") ?? "default";
 
   // Poll continuously while mounted. Consensus lands a second or two after the
@@ -81,6 +84,22 @@ export const HederaPanel: FC<{ eventCount: number; anchorable: number }> = ({
   }, [sessionId, eventCount]);
 
   if (!hcs?.configured) return null;
+
+  /**
+   * One topic per AGENT, not per session — so the raw topic carries every room
+   * that ever taught this agent. Showing all of it here made the panel read as
+   * "someone else's messages in my chat".
+   *
+   * Filtered by event id rather than by publishing a session id: room ids are
+   * effectively invite links, and putting them on a public ledger would let
+   * anyone reading the topic enumerate rooms. The ids we already anchor are
+   * enough to recognise our own.
+   */
+  const mine = new Set(eventIds);
+  const visible =
+    scope === "session"
+      ? hcs.messages.filter((m) => m.payload.id && mine.has(m.payload.id))
+      : hcs.messages;
 
   // Only ANCHORABLE events can ever reach the topic. Comparing against the full
   // event count made the counter permanently large and always climbing, which
@@ -118,6 +137,27 @@ export const HederaPanel: FC<{ eventCount: number; anchorable: number }> = ({
           {strip.join(" · ")}
         </p>
       )}
+
+      {/* The shared topic is the point — one agent, one provenance log across
+          every session that taught it — so it stays one click away. */}
+      <div className="flex gap-1 pb-2">
+        {(["session", "topic"] as const).map((s2) => (
+          <button
+            key={s2}
+            onClick={() => {
+              setScope(s2);
+              shown.reset();
+            }}
+            className={`rounded-md px-2 py-0.5 text-[11px] ${
+              scope === s2
+                ? "bg-[var(--color-ink)] text-[var(--color-cream)]"
+                : "border border-[#1a1a18]/20 hover:bg-white/60"
+            }`}
+          >
+            {s2 === "session" ? "This session" : `Whole agent (${hcs.messages.length})`}
+          </button>
+        ))}
+      </div>
 
       <dl className="space-y-1 pb-2 text-[11.5px]">
         <div className="flex justify-between gap-2">
@@ -161,7 +201,7 @@ export const HederaPanel: FC<{ eventCount: number; anchorable: number }> = ({
       )}
 
       <ol className="space-y-1">
-        {hcs.messages.slice(0, shown.count).map((m) => (
+        {visible.slice(0, shown.count).map((m) => (
           <li key={m.sequenceNumber} className="border-b border-[#1a1a18]/6 pb-1 last:border-0">
             {/* Every anchored row opens the decoded message on HashScan — the
                 point is that a reader can check us, not take our word. */}
@@ -188,17 +228,21 @@ export const HederaPanel: FC<{ eventCount: number; anchorable: number }> = ({
             </a>
           </li>
         ))}
-        {hcs.messages.length === 0 && (
-          <li className="text-[11.5px] text-[var(--color-faint)]">nothing anchored yet</li>
+        {visible.length === 0 && (
+          <li className="text-[11.5px] text-[var(--color-faint)]">
+            {scope === "session"
+              ? "nothing from this session anchored yet"
+              : "nothing anchored yet"}
+          </li>
         )}
       </ol>
 
-      {hcs.messages.length > shown.count && (
+      {visible.length > shown.count && (
         <button
           onClick={shown.more}
           className="mt-1.5 w-full rounded-md border border-[#1a1a18]/15 py-1 text-[11px] text-[var(--color-muted)] hover:bg-white/60"
         >
-          Show 10 more ({hcs.messages.length - shown.count} left)
+          Show 10 more ({visible.length - shown.count} left)
         </button>
       )}
     </section>

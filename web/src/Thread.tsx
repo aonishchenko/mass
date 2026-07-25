@@ -1,7 +1,7 @@
 /**
  * Claude-styled thread — cream ground, serif, minimal chrome, per the
- * assistant-ui Claude example. Adapted for MASS: a lane switch in the composer
- * and citation highlighting in assistant output (MASS-specs MUST #5).
+ * assistant-ui Claude example. Adapted for MASS: citation highlighting in
+ * assistant output (MASS-specs MUST #5).
  */
 
 import {
@@ -171,51 +171,18 @@ const AssistantMessage: FC<{ view: SessionView; onFocusTeach: () => void }> = ({
   );
 };
 
-const LaneToggle: FC<{ lane: Lane; setLane: (l: Lane) => void; canCommit: boolean }> = ({
-  lane,
-  setLane,
-  canCommit,
-}) => (
-  <div className="flex items-center gap-1">
-    <button
-      type="button"
-      onClick={() => setLane("draft")}
-      className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs transition-colors ${
-        lane === "draft"
-          ? "bg-[#1a1a18]/8 text-[var(--color-ink)]"
-          : "text-[var(--color-faint)] hover:bg-[#1a1a18]/5"
-      }`}
-    >
-      <ZapIcon size={13} /> quick mode
-    </button>
-    <button
-      type="button"
-      onClick={() => canCommit && setLane("canonical")}
-      disabled={!canCommit}
-      title={
-        canCommit
-          ? "Runs in a sealed enclave, pays per answer, and cites its teachers"
-          : "Needs 2 signers present"
-      }
-      className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs transition-colors ${
-        lane === "canonical"
-          ? "bg-[var(--color-accent)]/15 text-[var(--color-accent)]"
-          : "text-[var(--color-faint)] hover:bg-[#1a1a18]/5"
-      } ${!canCommit ? "cursor-not-allowed opacity-40" : ""}`}
-    >
-      <ShieldCheckIcon size={13} /> careful mode
-    </button>
-  </div>
-);
-
+/**
+ * Crew chat is always the draft lane. The canonical lane is not a mode the crew
+ * picks — it is what happens when the agent is HIRED, so it belongs to "Run a
+ * job" (see Rail), not to a switch above the composer. Choosing "sealed vs
+ * unsealed" per message also welded the UI to one provider's capability; a job
+ * is provider-independent.
+ */
 export const Thread: FC<{
   view: SessionView;
-  lane: Lane;
-  setLane: (l: Lane) => void;
-  canCommit: boolean;
   seated: boolean;
   onTeach: (text: string) => void;
-}> = ({ view, lane, setLane, canCommit, seated, onTeach }) => {
+}> = ({ view, seated, onTeach }) => {
   // "Teach it now" points at the one input there is: focus it and let them type
   // the thing the agent just admitted it does not know.
   const focusComposer = () => {
@@ -261,11 +228,6 @@ export const Thread: FC<{
             doesn’t know yet.
           </p>
         )}
-        {lane === "canonical" && (
-          <p className="pb-2 text-center text-xs text-[var(--color-accent)]">
-            Careful mode — sealed run, paid per answer, cites its teachers.
-          </p>
-        )}
         <ComposerPrimitive.Root className="rounded-2xl border border-[#1a1a18]/12 bg-white/60 p-2.5 shadow-sm">
           <ComposerPrimitive.Input
             rows={1}
@@ -280,8 +242,7 @@ export const Thread: FC<{
             }
             className="w-full resize-none bg-transparent px-2 py-1.5 text-[15px] outline-none placeholder:text-[var(--color-faint)] disabled:opacity-50"
           />
-          <div className="flex items-center justify-between pt-1">
-            <LaneToggle lane={lane} setLane={setLane} canCommit={canCommit} />
+          <div className="flex items-center justify-end pt-1">
             <ComposerPrimitive.Send
               className="flex size-8 items-center justify-center rounded-full bg-[var(--color-ink)] text-[var(--color-cream)] transition-opacity hover:opacity-80 disabled:opacity-30"
               disabled={!seated || view.closed}

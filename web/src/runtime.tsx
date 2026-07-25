@@ -25,12 +25,10 @@ const convertMessage = (t: Turn): ThreadMessageLike => ({
 export function MassRuntimeProvider({
   view,
   send,
-  lane,
   children,
 }: {
   view: SessionView;
   send: (i: Intent) => void;
-  lane: Lane;
   children: ReactNode;
 }) {
   const runtime = useExternalStoreRuntime({
@@ -47,7 +45,8 @@ export function MassRuntimeProvider({
       if (!text.trim()) return;
       // Fire the intent only. The turn appears when the server emits `instruct`,
       // so every client sees it at the same point in the log.
-      send({ kind: "instruct", text, lane });
+      // Crew chat is always draft; the canonical lane belongs to a job.
+      send({ kind: "instruct", text, lane: "draft" });
     },
   });
 

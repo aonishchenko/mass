@@ -9,6 +9,7 @@ import {
   CheckIcon,
   DatabaseIcon,
   ExternalLinkIcon,
+  BriefcaseIcon,
   ScrollTextIcon,
   ShieldCheckIcon,
   SproutIcon,
@@ -120,6 +121,7 @@ export const Rail: FC<{
 }> = ({ view, send, verify, verifying }) => {
   const [name, setName] = useState("");
   const [copied, setCopied] = useState(false);
+  const [brief, setBrief] = useState("");
   const [authError, setAuthError] = useState<string | null>(null);
   const [delegating, setDelegating] = useState(false);
   const act = usePending(view);
@@ -544,7 +546,43 @@ export const Rail: FC<{
         )}
       </Section>
 
-      <HederaPanel eventCount={view.events.length} anchorable={anchorableCount} />
+      <Section icon={<BriefcaseIcon size={12} />} title="Run a job">
+        <p className="pb-2 text-[11.5px] leading-snug text-[var(--color-muted)]">
+          A paid job runs sealed in a TEE, answers only from the brain, cites the
+          people who taught it, and pays the compute provider on Hedera. This is
+          the agent working — not the crew chatting.
+        </p>
+        <textarea
+          value={brief}
+          onChange={(e) => setBrief(e.target.value)}
+          disabled={!seated || view.closed}
+          rows={2}
+          placeholder="What should the agent do? e.g. “Draft release notes for v2.1”"
+          className="w-full resize-none rounded-md border border-[#1a1a18]/15 bg-white/70 p-2 outline-none disabled:opacity-50"
+        />
+        <button
+          onClick={act.guard("job", () => {
+            send({ kind: "instruct", text: brief.trim(), lane: "canonical" });
+            setBrief("");
+          })}
+          disabled={!seated || view.closed || !brief.trim() || !p.canCommit || !!act.pending}
+          className="mt-1.5 w-full rounded-md bg-[var(--color-accent)] py-2 text-[12px] font-medium text-white hover:opacity-90 disabled:opacity-30"
+        >
+          {act.isPending("job") ? "Working…" : "Hire the agent — run a job"}
+        </button>
+        {!p.canCommit && (
+          <p className="pt-1 text-[11px] text-[var(--color-muted)]">
+            Needs 2 Signers present — a paid job spends the agent's treasury, so
+            it takes the same quorum as accepting a contribution.
+          </p>
+        )}
+      </Section>
+
+      <HederaPanel
+        eventCount={view.events.length}
+        anchorable={anchorableCount}
+        eventIds={view.events.map((e) => e.id)}
+      />
 
       <Section icon={<ScrollTextIcon size={12} />} title={`Log (${view.events.length})`}>
         <ol className="space-y-0.5 font-mono text-[10.5px] text-[var(--color-muted)]">

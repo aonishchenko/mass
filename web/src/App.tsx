@@ -9,15 +9,8 @@ export default function App() {
   const sessionId = new URLSearchParams(location.search).get("session") ?? "default";
   const { view, send, clearError } = useSession(sessionId);
   const world = useWorldVerify(sessionId);
-  const [lane, setLane] = useState<Lane>("draft");
 
   const p = perms(view);
-
-  // Authority is live: losing quorum must drop you out of the canonical lane,
-  // not leave a button that the server will reject (MASS-specs A4).
-  useEffect(() => {
-    if (lane === "canonical" && !p.canCommit) setLane("draft");
-  }, [lane, p.canCommit]);
 
   useEffect(() => {
     if (!view.error) return;
@@ -26,14 +19,11 @@ export default function App() {
   }, [view.error, clearError]);
 
   return (
-    <MassRuntimeProvider view={view} send={send} lane={lane}>
+    <MassRuntimeProvider view={view} send={send}>
       <div className="flex h-full">
         <main className="min-w-0 grow">
           <Thread
             view={view}
-            lane={lane}
-            setLane={setLane}
-            canCommit={p.canCommit}
             seated={!!view.you}
             onTeach={(text) =>
               send({ kind: "proposeContrib", text, source: "composer" })
