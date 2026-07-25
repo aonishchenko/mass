@@ -168,10 +168,15 @@ export async function extractCandidates(
     {
       role: "system",
       content:
-        "Select which of the numbered statements are durable knowledge worth teaching " +
-        "a team member permanently (rules, policies, standards, preferences). Exclude " +
-        "questions, chit-chat, and one-off task requests. Reply with ONLY a JSON array " +
-        'of objects: [{"n": <number>, "text": "<cleaned-up statement>"}]. No prose.',
+        "Below are things people said to an AI team member. Select the ones that are " +
+        "durable knowledge worth teaching it permanently: rules, policies, standards, " +
+        "preferences, facts about how this team works, and anything phrased as an " +
+        "instruction to remember. Exclude questions, small talk, and one-off task " +
+        "requests.\n\n" +
+        "Rewrite each selected item as a standalone statement, dropping conversational " +
+        'framing like "remember that" or "note this".\n\n' +
+        'Reply with ONLY a JSON array: [{"n": <number>, "text": "<statement>"}]. ' +
+        "No prose. If nothing qualifies, reply [].",
     },
     { role: "user", content: numbered },
   ];

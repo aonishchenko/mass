@@ -154,13 +154,19 @@ export const Rail: FC<{ view: SessionView; send: (i: Intent) => void }> = ({ vie
 
       <Section icon={<CheckIcon size={12} />} title="Harvest">
         {!view.harvestOpen ? (
-          <button
-            onClick={() => send({ kind: "openHarvest" })}
-            disabled={!seated || view.closed}
-            className="w-full rounded-md border border-[#1a1a18]/20 py-1.5 hover:bg-white/50 disabled:opacity-30"
-          >
-            Review what we said
-          </button>
+          <>
+            <p className="pb-2 text-[11.5px] leading-snug text-[var(--color-muted)]">
+              Just talk to the agent normally. Harvest pulls the teachable moments
+              out of the conversation so you don't have to flag them as you go.
+            </p>
+            <button
+              onClick={() => send({ kind: "openHarvest" })}
+              disabled={!seated || view.closed}
+              className="w-full rounded-md border border-[#1a1a18]/20 py-1.5 hover:bg-white/50 disabled:opacity-30"
+            >
+              Find teachable moments
+            </button>
+          </>
         ) : (
           <>
             <ul className="space-y-1.5">
@@ -215,14 +221,26 @@ export const Rail: FC<{ view: SessionView; send: (i: Intent) => void }> = ({ vie
       </Section>
 
       <div className="mt-auto px-4 py-3">
-        <button
-          onClick={() => send({ kind: "closeSession" })}
-          disabled={!seated || view.closed || view.harvestOpen}
-          title={view.harvestOpen ? "close the harvest first" : undefined}
-          className="w-full rounded-md border border-[#1a1a18]/25 py-1.5 hover:bg-white/50 disabled:opacity-30"
-        >
-          {view.closed ? "Session closed" : "Close session — The Birth"}
-        </button>
+        {view.closed ? (
+          <button
+            onClick={() => {
+              const id = Math.random().toString(36).slice(2, 8);
+              location.href = `${location.pathname}?session=${id}`;
+            }}
+            className="w-full rounded-md bg-[var(--color-ink)] py-1.5 text-[var(--color-cream)] hover:opacity-85"
+          >
+            Start a new session
+          </button>
+        ) : (
+          <button
+            onClick={() => send({ kind: "closeSession" })}
+            disabled={!seated || view.harvestOpen}
+            title={view.harvestOpen ? "finish the harvest first" : undefined}
+            className="w-full rounded-md border border-[#1a1a18]/25 py-1.5 hover:bg-white/50 disabled:opacity-30"
+          >
+            Close session — The Birth
+          </button>
+        )}
         {view.archiveRoot && (
           <p className="pt-1.5 font-mono text-[10px] break-all text-[var(--color-muted)]">
             archive {view.archiveRoot.slice(0, 18)}…

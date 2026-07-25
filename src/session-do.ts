@@ -420,12 +420,13 @@ export class SessionRoom extends DurableObject<Env> {
       }));
 
     // Manual harvest is the baseline; extraction is an enhancement on top and
-    // must never be a dependency (§7.5.6).
+    // must never be a dependency (§7.5.6). An extraction that returns nothing is
+    // a real answer ("none of this was teaching"), so it is NOT treated as
+    // failure — only a thrown error falls back to the raw list.
     let picked = humanLines;
     if (this.env.ZG_ROUTER_KEY) {
       try {
-        const extracted = await extractCandidates(this.env, humanLines);
-        if (extracted.length > 0) picked = extracted;
+        picked = await extractCandidates(this.env, humanLines);
       } catch (err) {
         console.error("extraction failed, falling back to manual harvest", err);
       }
@@ -516,7 +517,28 @@ export class SessionRoom extends DurableObject<Env> {
   // Close
   // -------------------------------------------------------------------------
 
+  /** Human instructions since the last harvest — the raw harvest material. */
+  private unharvestedCount(): number {
+    return this.session.events.filter(
+      (e) =>
+        e.type === "instruct" &&
+        e.seq > this.session.lastHarvestedSeq &&
+        "seat" in e.actor
+    ).length;
+  }
+
   private async closeSession(seat: Seat) {
+    // §7.5.1: harvest is auto-offered at close. Most people never click a
+    // "review" button on their own — they just talk, and the teachable moments
+    // sit in the transcript unclaimed. Offer the review instead of closing;
+    // closing again after the harvest resolves goes through.
+    if (!this.session.harvest?.open && this.unharvestedCount() > 0) {
+      await this.openHarvest(seat);
+      throw new Error(
+        "Before closing: keep anything worth teaching, then close again."
+      );
+    }
+
     await this.brainQueue; // let pending brain writes land before sealing
     try {
       const rootHash = await writeArchive(this.env, this.session.events);

@@ -102,6 +102,11 @@ export const Thread: FC<{
           <p className="pt-2 text-sm text-[var(--color-muted)]">
             Together. On the record.
           </p>
+          <p className="mx-auto max-w-md pt-6 text-[13px] leading-relaxed text-[var(--color-faint)]">
+            Talk to it normally. When you say something it should keep forever,
+            harvest it into the brain — the crew co-signs, and whoever taught it
+            earns a share.
+          </p>
         </div>
       </ThreadPrimitive.Empty>
 
