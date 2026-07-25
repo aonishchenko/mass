@@ -1,0 +1,51 @@
+name: CI
+
+# Typecheck, tests, build and the zero-hex check on every push and PR.
+#
+# main is a shared, fast-moving branch: without this, a type error or a failing
+# test can land and only be discovered by the next person to pull. This job does
+# NOT deploy anything — the sidecar image pipeline stays in its own workflow.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # The 0G storage SDK pins ethers 6.13.1 while the root project uses
+      # 6.17.x, so npm's peer resolution needs the same flag the team uses
+      # locally. Without it the install fails on ERESOLVE.
+      - name: Install (worker)
+        run: npm ci --legacy-peer-deps || npm install --legacy-peer-deps
+
+      - name: Install (web)
+        run: npm --prefix web ci || npm --prefix web install
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Tests
+        run: npm test
+
+      - name: Zero-hex check (ENS doctrine)
+        run: node scripts/grep-hex.mjs
+
+      # Also proves the Worker bundles — a broken import surfaces here rather
+      # than at deploy time.
+      - name: Build web
+        run: npm run web:build

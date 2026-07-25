@@ -260,6 +260,12 @@ export interface TokenClaims {
   verifiedAt: number;
   exp: number;
   dev: boolean;
+  /**
+   * The session this proof was verified for. Without it, one verification is a
+   * skeleton key: a token minted for room A would seat its holder in every other
+   * room for the whole TTL. The DO rejects a token issued for a different room.
+   */
+  session: string;
 }
 
 function b64url(bytes: Uint8Array): string {
@@ -288,8 +294,13 @@ async function hmacKey(env: WorldEnv): Promise<CryptoKey> {
   );
 }
 
-/** Mint a signed token from a successful verification. */
-export async function issueToken(env: WorldEnv, kind: VerifyKind, outcome: VerifyOutcome): Promise<string> {
+/** Mint a signed token from a successful verification, bound to one session. */
+export async function issueToken(
+  env: WorldEnv,
+  kind: VerifyKind,
+  outcome: VerifyOutcome,
+  session: string
+): Promise<string> {
   if (!outcome.ok || !outcome.nullifierHash) throw new Error("cannot issue token for a failed verification");
   const claims: TokenClaims = {
     kind,
@@ -299,6 +310,7 @@ export async function issueToken(env: WorldEnv, kind: VerifyKind, outcome: Verif
     verifiedAt: outcome.verifiedAt,
     exp: outcome.verifiedAt + TOKEN_TTL_MS,
     dev: outcome.dev,
+    session,
   };
   const key = await hmacKey(env);
   const payload = new TextEncoder().encode(JSON.stringify(claims));

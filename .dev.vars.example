@@ -15,6 +15,11 @@ ZG_ROUTER_KEY_SEALED=
 # unset      -> canonical runs degraded and the UI shows the honesty banner
 ZG_SEALED=
 
+# Endpoint that returns the TEE attestation for a completed sealed response.
+# Unset => no attestation is fetched and NONE is claimed. We never invent one:
+# a proof chip that opens a fabricated id is worse than no chip (MASS-specs A3).
+ZG_ATTESTATION_URL=
+
 # Private key of a wallet with ON-CHAIN balance on OG Galileo Testnet. Signs 0G
 # Storage uploads (brain + archive), which is separate from Router inference
 # credit — so do not deposit your whole balance into the Router Main Account.

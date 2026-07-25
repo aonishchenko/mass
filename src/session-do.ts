@@ -169,8 +169,15 @@ export class SessionRoom extends DurableObject<Env> {
       const kind: VerifyKind = url.searchParams.get("kind") === "agentkit" ? "agentkit" : "selfie";
       return Response.json(buildContext(this.env, kind));
     }
-    if (url.pathname.endsWith("/verify/selfie")) return this.handleVerify(request, "selfie");
-    if (url.pathname.endsWith("/verify/agentkit")) return this.handleVerify(request, "agentkit");
+    // The session id travels with the request so the issued token can be bound
+    // to this room only (see issueToken).
+    const verifySession = url.searchParams.get("session") ?? "default";
+    if (url.pathname.endsWith("/verify/selfie")) {
+      return this.handleVerify(request, "selfie", verifySession);
+    }
+    if (url.pathname.endsWith("/verify/agentkit")) {
+      return this.handleVerify(request, "agentkit", verifySession);
+    }
     if (url.pathname.endsWith("/verify/log")) return this.handleVerifyLog();
 
     // ENS (M5) — resolve any name, or the agent's live employment record (CV).
@@ -398,6 +405,33 @@ export class SessionRoom extends DurableObject<Env> {
       return this.sendError(ws, "Seat claim requires a verified Selfie Check.", "claimSeat");
     }
 
+    // A proof is valid for the room it was verified for, and no other.
+    if (claims.session !== this.session.sessionId) {
+      return this.sendError(ws, "That verification was for a different session.", "claimSeat");
+    }
+
+    // One socket, one seat: a second claim used to silently orphan the first,
+    // leaving a ghost in the crew list that nobody could act as.
+    const existing = (ws.deserializeAttachment() ?? { seat: null }) as SocketMeta;
+    if (existing.seat && this.session.seats[existing.seat]) {
+      return this.sendError(ws, "You already hold a seat in this session.", "claimSeat");
+    }
+
+    // One verified human, one seat. The nullifier is World's per-action unique
+    // human id, so re-using it is the same person claiming twice — which would
+    // let one human hold several cap-table shares and defeat the entire
+    // sybil-resistance claim.
+    const duplicate = Object.values(this.session.seats).find(
+      (s) => s.nullifierHash && s.nullifierHash === claims.nullifierHash
+    );
+    if (duplicate) {
+      return this.sendError(
+        ws,
+        "This human already holds a seat in this session.",
+        "claimSeat"
+      );
+    }
+
     const seatId = newId("s");
     // Assign a unique ENS subname now (M5) so the seat has a resolvable identity
     // from the first event — zero hex anywhere in the UI.
@@ -453,6 +487,9 @@ export class SessionRoom extends DurableObject<Env> {
     if (!claims || claims.kind !== "agentkit") {
       return this.sendError(ws, "Signer delegation requires a verified Orb / AgentKit proof.", "delegate");
     }
+    if (claims.session !== this.session.sessionId) {
+      return this.sendError(ws, "That verification was for a different session.", "delegate");
+    }
     if (!atLeast(seat.tier, "T2")) {
       return this.sendError(ws, "Become a Builder (Selfie Check) before delegating as a Signer.", "delegate");
     }
@@ -475,7 +512,11 @@ export class SessionRoom extends DurableObject<Env> {
    * only then mint an HMAC-signed token the DO will trust. A forged proof gets a
    * 401. Every attempt is logged (sanitized) for the on-stage check.
    */
-  private async handleVerify(request: Request, kind: VerifyKind): Promise<Response> {
+  private async handleVerify(
+    request: Request,
+    kind: VerifyKind,
+    session: string
+  ): Promise<Response> {
     let proof: unknown = null;
     try {
       const body = (await request.json()) as { proof?: unknown };
@@ -499,7 +540,7 @@ export class SessionRoom extends DurableObject<Env> {
       return Response.json({ ok: false, error: outcome.error ?? "verification failed" }, { status: 401 });
     }
 
-    const token = await issueToken(this.env, kind, outcome);
+    const token = await issueToken(this.env, kind, outcome, session);
     if (kind === "selfie") {
       return Response.json({
         ok: true,
