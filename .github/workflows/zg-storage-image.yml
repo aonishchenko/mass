@@ -1,9 +1,12 @@
 name: Publish & deploy zg-storage
 
-# Runs on every push to main, but only redeploys when the sidecar image actually
-# changed. It compares the newly built image DIGEST against the digest Railway is
-# already running: identical content means a redeploy would restart a healthy
-# service for nothing, so it is skipped.
+# Every push to main rebuilds the sidecar image and redeploys Railway.
+#
+# An earlier version tried to skip the redeploy when the image was unchanged,
+# but build-push-action stamps the commit SHA into the image labels, so the
+# digest differs on every commit even when the sidecar code is identical. The
+# check could never fire, so it was removed rather than left looking like a
+# safeguard. Cost of always deploying: roughly 20s of sidecar downtime per push.
 #
 # Railway deploys from a public ghcr image rather than from GitHub source,
 # because its GitHub App is not linked to the Railway account and a
@@ -13,11 +16,6 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
-    inputs:
-      force:
-        description: "Redeploy even if the image is unchanged"
-        type: boolean
-        default: false
 
 concurrency:
   group: zg-storage-deploy
@@ -52,13 +50,12 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Deploy to Railway if the image changed
+      - name: Deploy to Railway
         env:
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
           SERVICE_ID: ${{ secrets.RAILWAY_SERVICE_ID }}
           ENVIRONMENT_ID: ${{ secrets.RAILWAY_ENVIRONMENT_ID }}
           DIGEST: ${{ steps.build.outputs.digest }}
-          FORCE: ${{ inputs.force }}
         run: |
           set -euo pipefail
 
@@ -72,18 +69,7 @@ jobs:
               -H 'content-type: application/json' -d "$1"
           }
 
-          CURRENT=$(gql "$(jq -nc --arg s "$SERVICE_ID" '{
-            query: "query($s:String!){ service(id:$s){ serviceInstances{ edges{ node{ source{ image } } } } } }",
-            variables: { s: $s }
-          }')" | jq -r '.data.service.serviceInstances.edges[0].node.source.image // ""')
-
-          echo "running: ${CURRENT:-<none>}"
-          echo "built:   $IMAGE"
-
-          if [ "$CURRENT" = "$IMAGE" ] && [ "${FORCE:-false}" != "true" ]; then
-            echo "Image unchanged — skipping redeploy of a healthy service."
-            exit 0
-          fi
+          echo "deploying $IMAGE"
 
           gql "$(jq -nc --arg s "$SERVICE_ID" --arg e "$ENVIRONMENT_ID" --arg i "$IMAGE" '{
             query: "mutation($s:String!,$e:String!,$i:String!){ serviceInstanceUpdate(serviceId:$s, environmentId:$e, input:{ source:{ image:$i } }) }",
