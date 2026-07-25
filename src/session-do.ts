@@ -487,6 +487,24 @@ export class SessionRoom extends DurableObject<Env> {
       { system: true }
     );
 
+    // A dev-bypassed seat becomes a Signer immediately. The dev path exists so
+    // the crew can rehearse the whole arc, and stopping at Builder blocks it —
+    // co-signing needs two Signers, so a Builder-only dev seat can reach
+    // nothing. Granted here rather than by a follow-up delegate message so the
+    // two events cannot interleave with another handler.
+    if (claims.dev && grantedTier !== "T1") {
+      await this.emit(
+        "verify.agentkit.ok",
+        {
+          seat: seatId,
+          proofRef: claims.nullifierHash,
+          principal: claims.nullifierHash,
+          dev: true,
+        },
+        { system: true }
+      );
+    }
+
     const token = newId("tok") + crypto.randomUUID().replace(/-/g, "");
     this.ctx.storage.sql.exec(
       "INSERT INTO seat_tokens (token, seat) VALUES (?, ?)",
