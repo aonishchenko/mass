@@ -167,3 +167,48 @@ describe("harvest — §7.5", () => {
     expect(s.contributions["c1"].source).toBe("harvest");
   });
 });
+
+describe("naming the agent", () => {
+  it("keeps each field independently, so one edit cannot erase another", () => {
+    const s = replay(EMPTY_SESSION("s1"), [
+      ...bootstrap(),
+      ev(
+        "session.named",
+        { agentName: "Scout", agentEnsName: "scout.mass.eth" },
+        { seat: "s_a", tier: "T2" }
+      ),
+      // Somebody else fills in the purpose. The name and its ENS subname must
+      // survive: a second person describing the job should not un-name the
+      // agent, and correcting the description must not reissue its identity.
+      ev("session.named", { purpose: "reviews our docs" }, { seat: "s_b", tier: "T2" }),
+    ]);
+    expect(s.agentName).toBe("Scout");
+    expect(s.agentEnsName).toBe("scout.mass.eth");
+    expect(s.purpose).toBe("reviews our docs");
+  });
+
+  it("a rename replaces the name and its subname together", () => {
+    const s = replay(EMPTY_SESSION("s1"), [
+      ...bootstrap(),
+      ev("session.named", { agentName: "Scout", agentEnsName: "scout.mass.eth" }),
+      ev("session.named", { agentName: "Doc", agentEnsName: "doc.mass.eth" }),
+    ]);
+    expect(s.agentName).toBe("Doc");
+    expect(s.agentEnsName).toBe("doc.mass.eth");
+  });
+});
+
+describe("the build-path step travels with the work", () => {
+  it("keeps the slot a contribution was proposed under", () => {
+    // Whether it came from the composer or the harvest, the step is on the
+    // proposal — readiness counts accepted work per step and must not depend
+    // on what the rail happened to be showing.
+    const s = replay(EMPTY_SESSION("s1"), [
+      ...bootstrap(),
+      ev("contrib.proposed", { contribId: "c1", text: "never guess an API", source: "composer", slot: "soul" }, { seat: "s_a", tier: "T3" }),
+      ev("contrib.proposed", { contribId: "c2", text: "cut the throat-clearing", source: "harvest", harvestId: "h1", slot: "voice" }, { seat: "s_b", tier: "T3" }),
+    ]);
+    expect(s.contributions["c1"].slot).toBe("soul");
+    expect(s.contributions["c2"].slot).toBe("voice");
+  });
+});

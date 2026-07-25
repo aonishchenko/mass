@@ -23,6 +23,7 @@ import type {
   SeatClaimedPayload,
   SelfieOkPayload,
   Session,
+  SessionNamedPayload,
 } from "./types.js";
 
 export function apply(s: Session, e: MassEvent): Session {
@@ -34,6 +35,19 @@ export function apply(s: Session, e: MassEvent): Session {
       // session id (token binding, the CV lookup) saw the wrong room.
       const p = e.payload as { sessionId?: string } | undefined;
       return { ...s, created: true, sessionId: p?.sessionId ?? s.sessionId };
+    }
+
+    case "session.named": {
+      // Each field is kept independently: naming the agent must not wipe the
+      // purpose somebody else wrote, and correcting the purpose must not drop
+      // the ENS name the agent already answers to.
+      const p = e.payload as SessionNamedPayload;
+      return {
+        ...s,
+        purpose: p.purpose?.trim() || s.purpose,
+        agentName: p.agentName?.trim() || s.agentName,
+        agentEnsName: p.agentEnsName || s.agentEnsName,
+      };
     }
 
     case "seat.claimed": {
@@ -126,6 +140,7 @@ export function apply(s: Session, e: MassEvent): Session {
             cosigners: [],
             screened: false,
             harvestId: p.harvestId,
+            slot: p.slot,
           },
         },
       };

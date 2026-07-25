@@ -51,7 +51,9 @@ export const HederaPanel: FC<{
   anchorable: number;
   /** This session's event ids, used to show only our own anchors. */
   eventIds: string[];
-}> = ({ eventCount, anchorable, eventIds }) => {
+  /** seat id -> display name, so anchored rows read as people. */
+  seatNames: Record<string, string>;
+}> = ({ eventCount, anchorable, eventIds, seatNames }) => {
   const [hcs, setHcs] = useState<HcsResponse | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
   const shown = useVisible(10);
@@ -231,8 +233,11 @@ export const HederaPanel: FC<{
                 <span className="text-[var(--color-faint)]">#{m.sequenceNumber}</span>{" "}
                 <span className="font-mono text-[11px]">{m.payload.type}</span>
                 {m.payload.seat && (
-                  <span className="pl-1 font-mono text-[10px] text-[var(--color-muted)]">
-                    {m.payload.seat.slice(0, 8)}
+                  // An opaque seat id makes your own events look like someone
+                  // else's. The ledger keeps the pseudonym; the UI shows the
+                  // person, which is also the zero-hex doctrine (A5).
+                  <span className="pl-1 text-[11px] text-[var(--color-muted)]">
+                    {seatNames[m.payload.seat] ?? m.payload.seat.slice(0, 8)}
                   </span>
                 )}
               </span>

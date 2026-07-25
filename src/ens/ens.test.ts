@@ -34,6 +34,12 @@ describe("label normalization", () => {
     expect(agentName(env)).toBe("docs.mass.eth");
     expect(agentName({ ...env, ENS_AGENT_LABEL: "writer" })).toBe("writer.mass.eth");
   });
+  it("prefers the name this crew gave their agent over the deployment label", () => {
+    // ENS_AGENT_LABEL is one value for every session the deployment runs. The
+    // subname derived when THIS crew named THIS agent has to win.
+    expect(agentName(env, { agentEnsName: "scout.mass.eth" })).toBe("scout.mass.eth");
+    expect(agentName(env, { agentEnsName: undefined })).toBe("docs.mass.eth");
+  });
 });
 
 describe("unique seat labels", () => {

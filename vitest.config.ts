@@ -5,7 +5,9 @@ import { defineConfig } from "vitest/config";
 // once src/session-do.ts lands.
 export default defineConfig({
   test: {
-    include: ["src/**/*.test.ts"],
+    // web/src is included for the pure logic that lives there (the Build Path's
+    // derived readiness), not for component rendering.
+    include: ["src/**/*.test.ts", "web/src/**/*.test.ts"],
     environment: "node",
   },
 });

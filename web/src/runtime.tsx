@@ -25,10 +25,13 @@ const convertMessage = (t: Turn): ThreadMessageLike => ({
 export function MassRuntimeProvider({
   view,
   send,
+  slot,
   children,
 }: {
   view: SessionView;
   send: (i: Intent) => void;
+  /** The build-path step on screen right now, in workflow mode. */
+  slot?: string;
   children: ReactNode;
 }) {
   const runtime = useExternalStoreRuntime({
@@ -43,6 +46,15 @@ export function MassRuntimeProvider({
       const part = message.content[0];
       const text = part?.type === "text" ? part.text : "";
       if (!text.trim()) return;
+      // While the agent is interviewing, what you type is an ANSWER, not a
+      // question. Routing it through the agent made every interview answer come
+      // back with "I haven't been taught that yet" — the agent asks something,
+      // you answer, and it tells you it doesn't know. So the answer goes
+      // straight to the crew for approval instead.
+      if (slot) {
+        send({ kind: "proposeContrib", text, source: "composer", slot });
+        return;
+      }
       // Fire the intent only. The turn appears when the server emits `instruct`,
       // so every client sees it at the same point in the log.
       // Crew chat is always draft; the canonical lane belongs to a job.

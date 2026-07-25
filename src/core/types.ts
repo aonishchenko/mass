@@ -16,6 +16,7 @@ export type ContribSource = "composer" | "draft" | "harvest";
 
 export type EventType =
   | "session.created"
+  | "session.named"
   | "seat.claimed"
   | "seat.left"
   | "seat.rejoined"
@@ -91,6 +92,19 @@ export interface SeatClaimedPayload {
   ensName?: string;
 }
 
+/** A4: what this crew is building, so a visitor is not met with a room code. */
+export interface SessionNamedPayload {
+  purpose?: string;
+  /** What the crew calls the agent, in their words. */
+  agentName?: string;
+  /**
+   * The ENS subname derived from that name, under the crew parent. Derived on
+   * the server and carried in the event, so the agent's identity comes from the
+   * log rather than from a deployment-wide env label (M5).
+   */
+  agentEnsName?: string;
+}
+
 export interface SelfieOkPayload {
   seat: string;
   sybilScore: number;
@@ -130,6 +144,13 @@ export interface InstructPayload {
   instructId: string;
   text: string;
   lane: Lane;
+  /**
+   * The build-path step on screen when this was said. Recorded at speaking
+   * time, because that is when the person was answering it: a contribution
+   * promoted from this line reads the slot back off the log instead of off
+   * whatever the rail happens to be showing by the time somebody clicks.
+   */
+  slot?: string;
 }
 
 export interface RunStartedPayload {
@@ -150,6 +171,12 @@ export interface ContribProposedPayload {
   contribId: string;
   text: string;
   source: ContribSource;
+  /**
+   * Which of the twelve build-path steps this answers, if any. Readiness is
+   * DERIVED by counting accepted contributions per slot — never stored as a
+   * flag, so a step cannot be marked done by assertion (BUILD-PATH.md §2).
+   */
+  slot?: string;
   fromRunId?: string;
   harvestId?: string;
   fromEventId?: string;
@@ -261,8 +288,20 @@ export type Intent =
   | { kind: "delegate"; agentkitToken: string }
   /** Re-attach to an existing seat after a reload, using the seat's token. */
   | { kind: "resumeSeat"; token: string }
-  | { kind: "instruct"; text: string; lane: Lane }
-  | { kind: "proposeContrib"; text: string; source: ContribSource; fromRunId?: string }
+  /**
+   * Name the agent and say what it is for. Any builder may set or correct it;
+   * naming it is what gives it its ENS subname.
+   */
+  | { kind: "nameSession"; purpose?: string; agentName?: string }
+  | { kind: "instruct"; text: string; lane: Lane; slot?: string }
+  | {
+      kind: "proposeContrib";
+      text: string;
+      source: ContribSource;
+      fromRunId?: string;
+      /** Build-path step this answers, when the crew is following the workflow. */
+      slot?: string;
+    }
   | { kind: "challengeContrib"; contribId: string; reason: string }
   | { kind: "cosign"; contribId: string }
   | { kind: "openHarvest" }
@@ -340,6 +379,8 @@ export interface Contribution {
   contribId: string;
   text: string;
   source: ContribSource;
+  /** Build-path step this answers, if the crew was following the workflow. */
+  slot?: string;
   proposedBy: string;
   state: ContribState;
   cosigners: string[];
@@ -357,6 +398,12 @@ export interface Harvest {
 
 export interface Session {
   sessionId: string;
+  /** What the crew is building, in their words. Empty until someone says. */
+  purpose?: string;
+  /** What the crew calls the agent. Empty until someone names it. */
+  agentName?: string;
+  /** The agent's ENS subname, derived from that name when it was given (M5). */
+  agentEnsName?: string;
   created: boolean;
   closed: boolean;
   seats: Record<string, Seat>;

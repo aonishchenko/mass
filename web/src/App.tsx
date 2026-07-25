@@ -2,15 +2,43 @@ import { useEffect, useState } from "react";
 import { MassRuntimeProvider } from "./runtime";
 import { Rail } from "./Rail";
 import { Thread } from "./Thread";
-import { perms, useSession, type Lane } from "./session";
+import { useSession } from "./session";
 import { useWorldVerify } from "./world";
+import { stepById, type BuildStep } from "./buildPath";
+
+/**
+ * How the crew wants to work.
+ *
+ * FREEFORM: just talk, and teach whatever turns out to be worth keeping.
+ * AGENT WORKFLOW: the agent interviews the crew through the twelve things it
+ * needs (STEP-BY-STEP-AGENT-WORKFLOW.md).
+ *
+ * It is a choice, not a wizard: switching is free, nothing is enforced, and a
+ * crew can jump between the two mid-session.
+ */
+export type Mode = "freeform" | "workflow";
 
 export default function App() {
   const sessionId = new URLSearchParams(location.search).get("session") ?? "default";
   const { view, send, clearError } = useSession(sessionId);
   const world = useWorldVerify(sessionId);
 
-  const p = perms(view);
+  // Remembered per room, so a refresh does not drop the crew out of the
+  // interview they were halfway through.
+  const [mode, setMode] = useState<Mode>(
+    () => (localStorage.getItem(`mass:mode:${sessionId}`) as Mode) ?? "freeform"
+  );
+  const [activeStep, setActiveStep] = useState<string | undefined>();
+
+  const chooseMode = (m: Mode) => {
+    setMode(m);
+    localStorage.setItem(`mass:mode:${sessionId}`, m);
+    if (m === "freeform") setActiveStep(undefined);
+  };
+
+  const pickStep = (step: BuildStep) => {
+    setActiveStep((current) => (current === step.id ? undefined : step.id));
+  };
 
   useEffect(() => {
     if (!view.error) return;
@@ -19,18 +47,36 @@ export default function App() {
   }, [view.error, clearError]);
 
   return (
-    <MassRuntimeProvider view={view} send={send}>
-      <div className="flex h-full">
-        <main className="min-w-0 grow">
+    <MassRuntimeProvider view={view} send={send} slot={mode === "workflow" ? activeStep : undefined}>
+      {/*
+        B7: judges browse on phones. Below md the rail stacks BELOW the
+        conversation instead of being cut off, and nothing scrolls sideways.
+      */}
+      <div className="flex h-full flex-col overflow-y-auto md:flex-row md:overflow-hidden">
+        <main className="min-h-[60vh] min-w-0 grow md:min-h-0">
           <Thread
             view={view}
             seated={!!view.you}
-            onTeach={(text) =>
-              send({ kind: "proposeContrib", text, source: "composer" })
+            step={mode === "workflow" ? stepById(activeStep) : undefined}
+            onDismissStep={() => setActiveStep(undefined)}
+            onTeach={(text, slot) =>
+              // The step comes from the MESSAGE, recorded when it was said —
+              // not from whatever is selected in the rail at click time, which
+              // credited answers to whichever step someone had opened since.
+              send({ kind: "proposeContrib", text, source: "composer", slot })
             }
           />
         </main>
-        <Rail view={view} send={send} verify={world.verify} verifying={world.busy} />
+        <Rail
+          view={view}
+          send={send}
+          verify={world.verify}
+          verifying={world.busy}
+          mode={mode}
+          setMode={chooseMode}
+          activeStep={activeStep}
+          onPickStep={pickStep}
+        />
       </div>
 
       {/* IDKit mounts once, here. Driven imperatively by useWorldVerify. */}

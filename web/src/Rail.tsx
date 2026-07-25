@@ -15,8 +15,12 @@ import {
   SproutIcon,
   UsersIcon,
 } from "lucide-react";
-import { perms, type Intent, type SessionView } from "./session";
+import { agentStatus, perms, type Intent, type SessionView, type Tier } from "./session";
 import { EnsPanel } from "./Ens";
+import { BuildPathPanel, ReadinessHint } from "./BuildPathPanel";
+import { agentLabel, agentLabelCap, BrainPanel, knownThings } from "./Brain";
+import type { BuildStep } from "./buildPath";
+import type { Mode } from "./App";
 
 // The one definition lives with the hook that consumes it. A local copy drifted
 // the moment world.tsx grew a field, and the compiler could not see it.
@@ -77,6 +81,57 @@ const EVENT_LABEL: Record<string, string> = {
 const labelFor = (type: string) => EVENT_LABEL[type] ?? type;
 
 /**
+ * What we can actually say about a seat's verification.
+ *
+ * The raw score is not per-person — it reflects the CREDENTIAL used, so every
+ * Orb user shows the same number, which is why six people all read "0.87". But
+ * "✓ Verified human" cannot be said of everyone either:
+ *
+ *  - a DEV-bypass seat was never checked against World at all;
+ *  - a seat below the sybil threshold is deliberately held at Observer, and
+ *    stamping it verified contradicts the downgrade sitting next to it.
+ *
+ * So each case says its own true thing, and none of them says a number.
+ */
+const VerificationBadge: FC<{ seat: { tier: Tier; dev?: boolean } }> = ({ seat }) => {
+  if (seat.dev) {
+    return (
+      <span
+        title="DEV bypass — this proof was never sent to World. Nothing here is verified."
+        className="rounded-full bg-amber-500/20 px-1.5 py-0.5 text-[10px] text-amber-900"
+      >
+        dev · unverified
+      </span>
+    );
+  }
+  if (seat.tier === "T1") {
+    return (
+      <span
+        title="A real World proof, but below our sybil threshold — watch-only until it clears."
+        className="rounded-full bg-[#1a1a18]/6 px-1.5 py-0.5 text-[10px] text-[var(--color-muted)]"
+      >
+        below threshold
+      </span>
+    );
+  }
+  return (
+    <span
+      title="Verified as one unique human by World, and checked on our server."
+      className="rounded-full bg-emerald-600/12 px-1.5 py-0.5 text-[10px] text-emerald-800"
+    >
+      ✓ Verified human
+    </span>
+  );
+};
+
+/** B1: a colleague has states, and waiting is shorter when you can see why. */
+const STATUS_LABEL: Record<string, string> = {
+  thinking: "thinking…",
+  answering: "answering…",
+  learning: "learning…",
+};
+
+/**
  * The events that are ever submitted to HCS — mirrors ANCHORED in
  * src/hedera/client.ts. Only these can be "awaiting consensus"; comparing the
  * whole event count against the topic made the panel claim a permanent, growing
@@ -108,15 +163,74 @@ const Section: FC<{ icon: React.ReactNode; title: string; children: React.ReactN
   </section>
 );
 
+/**
+ * The two ways to work. Presented as a real choice up front rather than a
+ * hidden mode: a crew that knows what it is doing wants to just talk, and a
+ * crew facing a blank page wants to be interviewed.
+ */
+const ModeChoice: FC<{ mode: Mode; setMode: (m: Mode) => void }> = ({ mode, setMode }) => (
+  <div className="border-b border-[#1a1a18]/8 px-4 py-3">
+    <p className="pb-1.5 text-[11px] tracking-wide text-[var(--color-faint)] uppercase">
+      How do you want to work?
+    </p>
+    <div className="grid grid-cols-2 gap-1.5">
+      {(
+        [
+          {
+            id: "freeform" as const,
+            label: "Freeform",
+            blurb: "Just talk. Teach what turns out to matter.",
+          },
+          {
+            id: "workflow" as const,
+            label: "Agent workflow",
+            blurb: "The agent interviews you, step by step.",
+          },
+        ]
+      ).map((m) => (
+        <button
+          key={m.id}
+          onClick={() => setMode(m.id)}
+          aria-pressed={mode === m.id}
+          className={`rounded-md border px-2 py-1.5 text-left transition-colors ${
+            mode === m.id
+              ? "border-[var(--color-accent)]/50 bg-[var(--color-accent)]/10"
+              : "border-[#1a1a18]/15 bg-white/40 hover:bg-white/70"
+          }`}
+        >
+          <span
+            className={`block text-[12px] font-medium ${
+              mode === m.id ? "text-[var(--color-accent)]" : ""
+            }`}
+          >
+            {m.label}
+          </span>
+          <span className="block pt-0.5 text-[10px] leading-tight text-[var(--color-muted)]">
+            {m.blurb}
+          </span>
+        </button>
+      ))}
+    </div>
+  </div>
+);
+
 export const Rail: FC<{
   view: SessionView;
   send: (i: Intent) => void;
   verify: VerifyFn;
   verifying: boolean;
-}> = ({ view, send, verify, verifying }) => {
+  mode: Mode;
+  setMode: (m: Mode) => void;
+  activeStep?: string;
+  onPickStep: (step: BuildStep) => void;
+}> = ({ view, send, verify, verifying, mode, setMode, activeStep, onPickStep }) => {
   const [name, setName] = useState("");
   const [copied, setCopied] = useState(false);
   const [brief, setBrief] = useState("");
+  const [logOpen, setLogOpen] = useState(false);
+  const [namingOpen, setNamingOpen] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
+  const [purposeDraft, setPurposeDraft] = useState("");
   const [authError, setAuthError] = useState<string | null>(null);
   const [delegating, setDelegating] = useState(false);
   const act = usePending(view);
@@ -131,6 +245,27 @@ export const Rail: FC<{
   /** Something has actually been kept in the open review — otherwise approving errors. */
   const keptAny = pending.some((c) => c.state === "proposed");
   const anchorableCount = view.events.filter((e) => ANCHORED.has(e.type)).length;
+  // nameSession is a Builder intent server-side. Offering "edit" to an Observer
+  // only produced a permission error after they had typed.
+  const canName = me?.tier === "T2" || me?.tier === "T3";
+
+  const openNaming = () => {
+    // Seed with what is already there: an edit should correct the line, not
+    // start from an empty box and silently drop the half nobody retyped.
+    setNameDraft(view.agentName ?? "");
+    setPurposeDraft(view.purpose ?? "");
+    setNamingOpen(true);
+  };
+
+  // The ledger in one plain line. Counted from the log; a category with nothing
+  // in it is left out rather than shown as a zero.
+  const countOf = (type: string) => view.events.filter((e) => e.type === type).length;
+  const summary = [
+    countOf("contrib.accepted") && `${countOf("contrib.accepted")} things taught`,
+    countOf("contrib.cosigned") && `${countOf("contrib.cosigned")} approvals`,
+    countOf("payment.executed") && `${countOf("payment.executed")} payments`,
+    countOf("hcs.anchored") && `${countOf("hcs.anchored")} on-chain`,
+  ].filter((x): x is string => typeof x === "string");
 
   // Ownership as a share, not a raw count: "1" means nothing to a reader, "100%"
   // is the number the product is actually about. (Interim proxy until the full
@@ -183,16 +318,85 @@ export const Rail: FC<{
   };
 
   return (
-    <aside className="flex h-full w-[340px] shrink-0 flex-col overflow-y-auto border-l border-[#1a1a18]/10 bg-[#e9e4d6] font-sans text-[13px] text-[var(--color-ink)]">
+    <aside className="flex w-full shrink-0 flex-col border-t border-[#1a1a18]/10 bg-[#e9e4d6] font-sans text-[13px] text-[var(--color-ink)] md:h-full md:w-[340px] md:overflow-y-auto md:border-t-0 md:border-l">
       {/*
         Sessions are keyed by ?session=. Two people on different keys are in
         different rooms and each thinks the other is silent, which is exactly
         what happened in testing. Show the room and hand out its link.
       */}
       <div className="border-b border-[#1a1a18]/8 bg-[#1a1a18]/4 px-4 py-2">
+        {/*
+          "yk9s6j" tells a person who just joined nothing at all. What the crew
+          is building is the one line that gives every visitor instant context.
+        */}
+        {namingOpen ? (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              const agentName = nameDraft.trim();
+              const purpose = purposeDraft.trim();
+              if (agentName || purpose) send({ kind: "nameSession", agentName, purpose });
+              setNamingOpen(false);
+            }}
+            className="space-y-1.5 pb-1.5"
+          >
+            <input
+              autoFocus
+              value={nameDraft}
+              onChange={(e) => setNameDraft(e.target.value)}
+              placeholder="Name your agent — e.g. Doc"
+              maxLength={40}
+              className="w-full rounded-md border border-[#1a1a18]/15 bg-white/80 px-2 py-1 text-[11.5px] outline-none"
+            />
+            <div className="flex gap-1.5">
+              <input
+                value={purposeDraft}
+                onChange={(e) => setPurposeDraft(e.target.value)}
+                placeholder="What it does — e.g. reviews our docs"
+                maxLength={120}
+                className="min-w-0 flex-1 rounded-md border border-[#1a1a18]/15 bg-white/80 px-2 py-1 text-[11.5px] outline-none"
+              />
+              <button className="rounded-md bg-[var(--color-ink)] px-2 text-[11px] text-[var(--color-cream)]">
+                Save
+              </button>
+            </div>
+            {/* Naming it is what gives it a name on ENS, so say so up front. */}
+            <p className="text-[10px] leading-tight text-[var(--color-faint)]">
+              {view.agentEnsName
+                ? `Answers to ${view.agentEnsName} — renaming issues a new subname.`
+                : "Naming it gives it its own ENS subname under the crew's name."}
+            </p>
+          </form>
+        ) : (
+          <button
+            onClick={() => canName && openNaming()}
+            disabled={!canName}
+            title={
+              canName
+                ? "Name your agent and say what it is for"
+                : "Verify as a Builder to name the agent"
+            }
+            className="block w-full pb-1 text-left text-[12px] disabled:cursor-default"
+          >
+            <span className="truncate">
+              <span className="text-[var(--color-muted)]">Building: </span>
+              <span className="font-medium">{agentLabel(view)}</span>
+              {view.purpose && (
+                <span className="text-[var(--color-muted)]"> — {view.purpose}</span>
+              )}
+              {canName && <span className="pl-1 text-[10px] text-[var(--color-faint)]">edit</span>}
+            </span>
+            {/* The agent's ENS name is its identity; show it once it has one. */}
+            {view.agentEnsName && (
+              <span className="block truncate text-[10px] text-[var(--color-faint)]">
+                {view.agentEnsName}
+              </span>
+            )}
+          </button>
+        )}
         <div className="flex items-center justify-between">
-          <span className="truncate text-[11px] text-[var(--color-muted)]">
-            room <span className="font-mono text-[var(--color-ink)]">{sessionId}</span>
+          <span className="truncate text-[10px] text-[var(--color-faint)]">
+            room <span className="font-mono">{sessionId}</span>
           </span>
           <button
             onClick={() => {
@@ -216,6 +420,30 @@ export const Rail: FC<{
           {act.isPending("newSession") ? "Starting…" : "Start a new session"}
         </button>
       </div>
+
+      <ModeChoice mode={mode} setMode={setMode} />
+
+      {/* Freeform still counts: a quiet hint that the twelve slots exist, and
+          that the crew has already filled some of them without being marched
+          through a wizard. */}
+      {mode === "freeform" && (
+        <div className="border-b border-[#1a1a18]/8 px-4 py-1.5 text-center">
+          <ReadinessHint
+            contributions={view.contributions}
+            capTableSize={Object.keys(view.capTable).length}
+          />
+        </div>
+      )}
+
+      {mode === "workflow" && (
+        <BuildPathPanel
+          contributions={view.contributions}
+          capTableSize={Object.keys(view.capTable).length}
+          activeStep={activeStep}
+          onPick={onPickStep}
+          disabled={!seated || view.closed}
+        />
+      )}
 
       {!seated && (
         <div className="border-b border-[#1a1a18]/8 px-4 py-3">
@@ -263,8 +491,25 @@ export const Rail: FC<{
         </div>
       )}
 
-      <Section icon={<UsersIcon size={12} />} title={`Crew (${seats.length})`}>
+      <Section icon={<UsersIcon size={12} />} title={`Crew (${seats.length + 1})`}>
         <ul className="space-y-1.5">
+          {/*
+            We call it a colleague, so it is in the room. Listing the agent
+            first, visually distinct, turns the central claim from copy into
+            something visible on screen.
+          */}
+          <li className="flex items-center justify-between rounded-md bg-[var(--color-accent)]/8 px-1.5 py-1">
+            <span className="min-w-0">
+              <span className="font-semibold">🤖 {agentLabelCap(view)}</span>
+              <span className="text-[var(--color-muted)]"> — the agent</span>
+              <span className="block truncate text-[10px] text-[var(--color-muted)]">
+                {STATUS_LABEL[agentStatus(view)] ??
+                  `knows ${knownThings(view).length} thing${
+                    knownThings(view).length === 1 ? "" : "s"
+                  }`}
+              </span>
+            </span>
+          </li>
           {seats.map((s) => {
             const t = TIER[s.tier] ?? TIER.T1;
             return (
@@ -285,14 +530,7 @@ export const Rail: FC<{
                   )}
                 </span>
                 <span className="flex shrink-0 items-center gap-1.5">
-                  {s.sybilScore !== undefined && (
-                    <span
-                      title="How confident we are this is one real person. Low scores get watch-only access."
-                      className="rounded-full bg-[#1a1a18]/6 px-1.5 py-0.5 text-[10px] tabular-nums text-[var(--color-muted)]"
-                    >
-                      Sybil {s.sybilScore.toFixed(2)}
-                    </span>
-                  )}
+                  {s.sybilScore !== undefined && <VerificationBadge seat={s} />}
                   <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${t.cls}`}>
                     {t.label}
                   </span>
@@ -351,8 +589,7 @@ export const Rail: FC<{
       <Section icon={<SproutIcon size={12} />} title="Waiting for approval">
         {pending.length === 0 && (
           <p className="text-[11.5px] leading-snug text-[var(--color-muted)]">
-            Nothing proposed yet. Use <em>Teach this</em> under any message you
-            sent, or harvest the conversation below.
+            Nothing waiting. Hover any message and choose <em>Teach this</em>.
           </p>
         )}
 
@@ -391,10 +628,13 @@ export const Rail: FC<{
         )}
       </Section>
 
-      <Section icon={<DatabaseIcon size={12} />} title="Who owns this agent">
+      <BrainPanel view={view} />
+
+      <Section icon={<DatabaseIcon size={12} />} title={`Who owns ${agentLabel(view)}`}>
         {totalContributions === 0 ? (
           <p className="text-[11.5px] leading-snug text-[var(--color-muted)]">
-            Nobody owns it yet. Teach it something.
+            Nobody owns {agentLabel(view)} yet. Teach it something and your name
+            appears here.
           </p>
         ) : (
           <>
@@ -580,9 +820,33 @@ export const Rail: FC<{
         eventCount={view.events.length}
         anchorable={anchorableCount}
         eventIds={view.events.map((e) => e.id)}
+        seatNames={Object.fromEntries(
+          Object.values(view.seats).map((st) => [st.seat, st.ensName ?? st.name])
+        )}
       />
 
-      <Section icon={<ScrollTextIcon size={12} />} title={`Log (${view.events.length})`}>
+      <Section icon={<ScrollTextIcon size={12} />} title="Ledger">
+        {/*
+          47 rows of "draft.completed" is precise for an engineer and noise for
+          everyone else. The meaning goes on top; the raw feed stays underneath
+          for anyone who wants to check us.
+        */}
+        <p className="pb-2 text-[11.5px] leading-snug">
+          {view.events.length === 0
+            ? "Everything that happens here gets recorded, and anchored on-chain."
+            : summary.join(" · ")}
+        </p>
+
+        {view.events.length > 0 && (
+          <button
+            onClick={() => setLogOpen((o) => !o)}
+            className="mb-1.5 w-full rounded-md border border-[#1a1a18]/15 py-1 font-sans text-[11px] text-[var(--color-muted)] hover:bg-white/60"
+          >
+            {logOpen ? "Hide activity" : `Show all activity (${view.events.length})`}
+          </button>
+        )}
+
+        {logOpen && (
         <ol className="space-y-0.5 font-mono text-[10.5px] text-[var(--color-muted)]">
           {[...view.events].reverse().slice(0, logShown.count).map((e) => (
             <li key={e.id}>
@@ -620,7 +884,8 @@ export const Rail: FC<{
             </li>
           ))}
         </ol>
-        {view.events.length > logShown.count && (
+        )}
+        {logOpen && view.events.length > logShown.count && (
           <button
             onClick={logShown.more}
             className="mt-1.5 w-full rounded-md border border-[#1a1a18]/15 py-1 font-sans text-[11px] hover:bg-white/60"

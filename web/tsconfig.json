@@ -11,5 +11,8 @@
     "noEmit": true,
     "types": ["vite/client"]
   },
-  "include": ["src"]
+  "include": ["src"],
+  // Tests are run by the root vitest config, not built into the app bundle —
+  // and vitest's types live in the root workspace, not in web/.
+  "exclude": ["src/**/*.test.ts"]
 }
