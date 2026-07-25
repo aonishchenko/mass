@@ -295,8 +295,18 @@ DoD: checklist 100%; N can run the entire demo alone.
   machine. 09:00 presentation. Then ENS booth + Hedera booth pitches.
 
 # PART F — REMAINING OPEN BLANKS (fill in as answered)
-[0G LATENCY: ____] [0G attestation surface: ____] [sealed models: ____]
+[0G LATENCY: **23.7 tok/s** streaming, measured 2026-07-25 testnet Router]
+[0G attestation surface: **per-key trust mode** — Standard / Verified / Private
+ (TEE enclave). Fixed at key creation, so draft and canonical use TWO keys.
+ Every response carries `x_0g_trace` {billing.total_cost, provider, request_id}]
+[sealed models: **qwen2.5-omni** — tee_attested, TeeTLS/TDX, ctx 32768. It is the
+ ONLY chatbot model on testnet; mainnet also has MiniMax-M3, GLM-5.1]
 [ENS NET: ____] [AgentKit multi-principal: ____] [prize-selection cap: ____]
+
+VERIFIED LIVE 2026-07-25 (Workers + Durable Objects, testnet):
+seats -> draft stream -> propose -> 2-of-M co-sign -> accept -> brain on 0G
+Storage (rootHash 0x82bdb783...) -> canonical answer citing
+"(per alice's contribution #1)". Novelty claim #3 demonstrated end to end.
 Honesty banner copy: "Unsealed mode — running on <provider>; no attestation
 available for this response."
 Open decisions in shared-session-spec (resolve before M0):

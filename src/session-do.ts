@@ -275,13 +275,22 @@ export class SessionRoom extends DurableObject<Env> {
       { agent: true }
     );
 
+    // Draft is exploratory, so it carries conversation history. Canonical does
+    // NOT: a sealed, attested, cap-table-bearing answer must be a function of
+    // (brain, question) alone. Feeding it unattested draft output both lets the
+    // model answer without consulting the brain — killing the citation — and
+    // quietly lets unattested content influence an attested result.
+    const messages =
+      lane === "canonical"
+        ? [{ role: "user" as const, content: text }]
+        : [...this.recentTurns(), { role: "user" as const, content: text }];
+
     // Deltas fan out on the wire only. The full text goes in the completion
     // event, which is what makes the log replayable (§4.3).
-    const history = this.recentTurns();
     const result = await runInference(
       this.env,
       lane,
-      [...history, { role: "user", content: text }],
+      messages,
       this.session.brainChunks,
       (token) => this.broadcast({ t: "delta", runId, token })
     );

@@ -56,14 +56,25 @@ export function citationSystemPrompt(chunks: BrainChunk[]): Msg {
     .map((c) => `[${c.contributor} #${c.contribNumber}] ${c.content}`)
     .join("\n");
 
+  // Wording matters more than it looks. Angle-bracket placeholders like
+  // <contributor> get echoed verbatim by smaller models, and putting the rule
+  // before the brain makes it ignored. Rule-after-brain with one concrete
+  // example was the only variant that cited correctly AND stayed silent on
+  // questions the brain does not cover (measured against qwen2.5-omni).
+  const example = chunks[0]
+    ? `(per ${chunks[0].contributor}'s contribution #${chunks[0].contribNumber})`
+    : "(per alice's contribution #1)";
+
   return {
     role: "system",
     content:
-      "You are a team member built by a crew of humans. The numbered items below " +
-      "are your brain: knowledge your teachers contributed.\n\n" +
-      (brain || "(your brain is empty; say so if asked what you know)") +
-      "\n\nWhen your answer draws on a brain chunk, cite it inline as " +
-      "(per <contributor>'s contribution #<n>). Never invent citations.",
+      "You are a team member built by a crew of humans.\n\nYOUR BRAIN:\n" +
+      (brain || "(empty — say so if asked what you know)") +
+      "\n\nRULE: when your answer uses information from a brain chunk, you MUST " +
+      "write the citation immediately after that information, in the form " +
+      `${example} — copying the exact name and number from that chunk's ` +
+      "brackets. Never cite a name or number not listed above. If you use no " +
+      "brain chunk, add no citation.",
   };
 }
 

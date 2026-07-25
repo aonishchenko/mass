@@ -10,6 +10,7 @@
  */
 
 import { encrypt } from "./crypto.js";
+import { installFetchAdapter } from "./axios-fetch-adapter.js";
 import type { BrainChunk, BrainDoc, MassEvent } from "../core/types.js";
 
 export interface StorageEnv {
@@ -29,9 +30,13 @@ export class StorageUnconfigured extends Error {
 async function upload(env: StorageEnv, bytes: Uint8Array): Promise<string> {
   if (!env.ZG_PRIVATE_KEY || !env.SESSION_KEY) throw new StorageUnconfigured();
 
+  // MUST run before the SDK is imported: its axios 0.27 picks an adapter at
+  // import time and neither choice exists in Workers. See axios-fetch-adapter.ts.
+  await installFetchAdapter();
+
   // Imported lazily so a missing/incompatible SDK cannot break session startup —
   // the failure surfaces on the write path, where it is handled (§10).
-  const { Indexer, MemData } = await import("@0gfoundation/0g-storage-ts-sdk/browser");
+  const { Indexer, MemData } = await import("@0gfoundation/0g-storage-ts-sdk");
   const { ethers } = await import("ethers");
 
   const provider = new ethers.JsonRpcProvider(env.ZG_STORAGE_RPC);
@@ -71,7 +76,8 @@ export async function writeArchive(env: StorageEnv, events: MassEvent[]): Promis
  * Encrypted blobs need downloadToBlob(), NOT download() — see §8.2.
  */
 export async function readBlob(env: StorageEnv, rootHash: string): Promise<Uint8Array> {
-  const { Indexer } = await import("@0gfoundation/0g-storage-ts-sdk/browser");
+  await installFetchAdapter();
+  const { Indexer } = await import("@0gfoundation/0g-storage-ts-sdk");
   const indexer = new Indexer(env.ZG_STORAGE_INDEXER);
   const [blob, err] = await indexer.downloadToBlob(rootHash);
   if (err) throw err;

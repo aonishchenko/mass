@@ -17,8 +17,11 @@
     // Non-secret config. Secrets (ZG_ROUTER_KEY, ZG_PRIVATE_KEY, SESSION_KEY)
     // go in .dev.vars locally and `wrangler secret put` in prod.
     "ZG_ROUTER_URL": "https://router-api-testnet.integratenetwork.work/v1",
-    "ZG_DRAFT_MODEL": "0GM-1.0-35B-A3B",
-    "ZG_CANONICAL_MODEL": "0GM-1.0-35B-A3B",
+    // Verified 2026-07-25: qwen2.5-omni is the ONLY chatbot model on testnet
+    // (tee_attested, TeeTLS, ctx 32768). Measured 23.7 tok/s streaming.
+    // Mainnet has more (MiniMax-M3, GLM-5.1) — re-check /v1/models if switching.
+    "ZG_DRAFT_MODEL": "qwen2.5-omni",
+    "ZG_CANONICAL_MODEL": "qwen2.5-omni",
     "ZG_STORAGE_RPC": "https://evmrpc-testnet.0g.ai",
     "ZG_STORAGE_INDEXER": "https://indexer-storage-testnet-turbo.0g.ai"
   }

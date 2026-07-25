@@ -226,6 +226,34 @@ citation attributes credit; letting an unattested exploratory run say
 *"(per Alice's contribution #7)"* attaches Alice's name to something nobody
 accepted and nothing can verify.
 
+## 6.2.1 Canonical does NOT inherit conversation history
+
+Draft carries recent turns, because exploration is a conversation. **Canonical
+takes the brain plus the current question and nothing else.**
+
+Two reasons, one discovered by testing:
+
+1. A sealed, attested, cap-table-bearing answer must be a function of
+   `(brain, question)` alone. Feeding it unattested draft output lets
+   unverifiable content shape an attested result.
+2. Empirically, with history in context the model answers *from the transcript*
+   and stops citing entirely — the brain becomes redundant, and novelty claim #3
+   silently dies. Removing history restored citation immediately.
+
+## 6.2.2 Citation prompt wording is load-bearing
+
+Measured against `qwen2.5-omni` (the only testnet chat model). Three variants
+tested; only one worked:
+
+| Variant | Result |
+|---|---|
+| Angle-bracket placeholder `(per <contributor>'s contribution #<n>)` | model echoes `<contributor>` literally |
+| Rule before the brain, terse | citation dropped or malformed |
+| **Rule after the brain, one concrete example** | **cites correctly; correctly silent when the brain does not cover the question** |
+
+Keep the rule *after* the brain block and keep the worked example. If the model
+changes, re-run the comparison — do not assume the prompt ports.
+
 ## 6.3 One adapter, lane as a parameter
 
 ```ts
