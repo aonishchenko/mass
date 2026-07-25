@@ -51,9 +51,13 @@ export const HederaPanel: FC<{
   anchorable: number;
   /** This session's event ids, used to show only our own anchors. */
   eventIds: string[];
-  /** seat id -> display name, so anchored rows read as people. */
-  seatNames: Record<string, string>;
-}> = ({ eventCount, anchorable, eventIds, seatNames }) => {
+  /**
+   * seat id -> display name, so anchored rows read as people rather than as
+   * opaque ids. Optional: the panel degrades to the short id, which keeps this
+   * component committable independently of its call site.
+   */
+  seatNames?: Record<string, string>;
+}> = ({ eventCount, anchorable, eventIds, seatNames = {} }) => {
   const [hcs, setHcs] = useState<HcsResponse | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
   const shown = useVisible(10);
