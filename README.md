@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/mass-hero.png" alt="MASS — Collectively build your new AI colleague" width="820">
+  <img src="assets/mass-explained.png" alt="MASS — Turn what your team knows into a colleague that earns for you. Everyone who teaches it owns a share of what it earns." width="900">
 </p>
 
 # MASS — Multiplayer Agent Session System
