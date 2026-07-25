@@ -1,0 +1,114 @@
+<!doctype html>
+<!--
+  Dev harness, not the product UI. Exists to verify the shared-session-spec §11
+  DoD (two browsers, one event stream, replay on join) before the assistant-ui
+  cockpit is wired. Replaced by web/ build output.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>MASS — dev harness</title>
+    <style>
+      body { font: 14px ui-monospace, monospace; margin: 0; display: grid; grid-template-columns: 1fr 1fr; height: 100vh; }
+      section { padding: 12px; overflow: auto; border-right: 1px solid #ccc; }
+      #log div { padding: 2px 0; border-bottom: 1px solid #eee; }
+      .delta { color: #888; }
+      .err { color: #c00; }
+      input, button { font: inherit; padding: 4px; }
+      #answer { white-space: pre-wrap; background: #f6f6f6; padding: 8px; min-height: 60px; }
+    </style>
+  </head>
+  <body>
+    <section>
+      <div>
+        <input id="name" placeholder="your name" />
+        <button id="join">claim seat</button>
+        <span id="me"></span>
+      </div>
+      <hr />
+      <div>
+        <input id="msg" placeholder="instruct the agent" size="40" />
+        <button id="draft">draft</button>
+        <button id="canon">canonical</button>
+      </div>
+      <div id="answer"></div>
+      <hr />
+      <div>
+        <input id="contrib" placeholder="teach the agent something" size="40" />
+        <button id="propose">propose</button>
+      </div>
+      <div id="contribs"></div>
+      <hr />
+      <button id="harvest">open harvest</button>
+      <button id="close">close session</button>
+      <div id="candidates"></div>
+    </section>
+    <section>
+      <b>event log</b> (<span id="count">0</span>)
+      <div id="log"></div>
+    </section>
+
+    <script type="module">
+      const params = new URLSearchParams(location.search);
+      const session = params.get("session") ?? "default";
+      const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws?session=${session}`);
+
+      const $ = (id) => document.getElementById(id);
+      const send = (intent) => ws.send(JSON.stringify(intent));
+      let me = null;
+
+      const logLine = (text, cls = "") => {
+        const d = document.createElement("div");
+        d.className = cls;
+        d.textContent = text;
+        $("log").prepend(d);
+      };
+
+      ws.onmessage = (e) => {
+        const f = JSON.parse(e.data);
+        if (f.t === "sync") {
+          $("log").innerHTML = "";
+          $("count").textContent = f.events.length;
+          // Replay: fold the log; both tabs end up identical (§4.1).
+          for (const ev of f.events) logLine(`#${ev.seq} ${ev.type}`);
+          if (f.you) { me = f.you; $("me").textContent = ` seat: ${me}`; }
+        } else if (f.t === "event") {
+          $("count").textContent = f.e.seq;
+          logLine(`#${f.e.seq} ${f.e.type} ${JSON.stringify(f.e.payload ?? {}).slice(0, 90)}`);
+          if (f.e.type === "draft.started" || f.e.type === "canonical.started") $("answer").textContent = "";
+          if (f.e.type === "contrib.proposed") {
+            const c = f.e.payload;
+            const b = document.createElement("button");
+            b.textContent = `cosign ${c.contribId}`;
+            b.onclick = () => send({ kind: "cosign", contribId: c.contribId });
+            $("contribs").append(b);
+          }
+        } else if (f.t === "delta") {
+          // Wire-only. Never enters the log (§4.3).
+          $("answer").textContent += f.token;
+        } else if (f.t === "candidates") {
+          $("candidates").innerHTML = "";
+          for (const c of f.candidates) {
+            const b = document.createElement("button");
+            b.textContent = `keep: ${c.text.slice(0, 40)}`;
+            b.onclick = () => send({ kind: "keepCandidate", harvestId: f.harvestId, candidateId: c.candidateId, text: c.text });
+            $("candidates").append(b);
+          }
+          const b = document.createElement("button");
+          b.textContent = "cosign batch";
+          b.onclick = () => send({ kind: "cosignBatch", harvestId: f.harvestId });
+          $("candidates").append(b);
+        } else if (f.t === "error") {
+          logLine(`ERROR ${f.message}`, "err");
+        }
+      };
+
+      $("join").onclick = () => send({ kind: "claimSeat", name: $("name").value || "anon" });
+      $("draft").onclick = () => send({ kind: "instruct", text: $("msg").value, lane: "draft" });
+      $("canon").onclick = () => send({ kind: "instruct", text: $("msg").value, lane: "canonical" });
+      $("propose").onclick = () => send({ kind: "proposeContrib", text: $("contrib").value, source: "composer" });
+      $("harvest").onclick = () => send({ kind: "openHarvest" });
+      $("close").onclick = () => send({ kind: "closeSession" });
+    </script>
+  </body>
+</html>

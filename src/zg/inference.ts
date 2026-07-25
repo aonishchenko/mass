@@ -1,0 +1,175 @@
+/**
+ * Inference adapter — MASS-specs C3, shared-session-spec §6.
+ *
+ * One adapter, lane is a parameter. Both lanes start on the 0G Router
+ * (OpenAI-compatible); canonical moves to the direct-broker path once latency is
+ * measured (§8.3).
+ */
+
+import type { BrainChunk, Lane } from "../core/types.js";
+
+export class SealedUnavailable extends Error {
+  constructor(provider: string) {
+    super(`sealed inference unavailable on ${provider}`);
+    this.name = "SealedUnavailable";
+  }
+}
+
+export interface InferenceEnv {
+  ZG_ROUTER_URL: string;
+  ZG_ROUTER_KEY?: string;
+  ZG_DRAFT_MODEL: string;
+  ZG_CANONICAL_MODEL: string;
+  /** Set once the direct-broker sealed path is wired. Until then canonical is honest-degraded. */
+  ZG_SEALED?: string;
+}
+
+export interface Msg {
+  role: "system" | "user" | "assistant";
+  content: string;
+}
+
+export interface RunResult {
+  text: string;
+  attestationRef?: string;
+  /** False => the UI must show the honesty banner (MASS-specs Part F copy). */
+  sealed: boolean;
+}
+
+/**
+ * C2: the canonical lane MUST require inline citation and forbid invention.
+ * Draft gets none of this — an unattested run must not attribute credit (§6.2).
+ */
+export function citationSystemPrompt(chunks: BrainChunk[]): Msg {
+  const brain = chunks
+    .map((c) => `[${c.contributor} #${c.contribNumber}] ${c.content}`)
+    .join("\n");
+
+  return {
+    role: "system",
+    content:
+      "You are a team member built by a crew of humans. The numbered items below " +
+      "are your brain: knowledge your teachers contributed.\n\n" +
+      (brain || "(your brain is empty; say so if asked what you know)") +
+      "\n\nWhen your answer draws on a brain chunk, cite it inline as " +
+      "(per <contributor>'s contribution #<n>). Never invent citations.",
+  };
+}
+
+const bodyFor = (model: string, messages: Msg[], stream: boolean) =>
+  JSON.stringify({ model, messages, stream });
+
+/**
+ * Streams tokens through `onToken` and resolves with the full text.
+ *
+ * The full text matters: `draft.completed` carries it, and without it the log is
+ * unreplayable (§4.3). Tokens themselves are wire-only and never logged.
+ */
+export async function runInference(
+  env: InferenceEnv,
+  lane: Lane,
+  messages: Msg[],
+  brainChunks: BrainChunk[],
+  onToken: (token: string) => void
+): Promise<RunResult> {
+  const sealed = lane === "canonical" && env.ZG_SEALED === "true";
+
+  if (lane === "canonical" && !sealed) {
+    // Honest degradation, not a silent downgrade: the caller surfaces the banner
+    // and no attestationRef is produced. See §6.3.
+    if (env.ZG_SEALED === "required") throw new SealedUnavailable("0g-router");
+  }
+
+  const model = lane === "canonical" ? env.ZG_CANONICAL_MODEL : env.ZG_DRAFT_MODEL;
+  const full = lane === "canonical" ? [citationSystemPrompt(brainChunks), ...messages] : messages;
+
+  const res = await fetch(`${env.ZG_ROUTER_URL}/chat/completions`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${env.ZG_ROUTER_KEY ?? ""}`,
+    },
+    body: bodyFor(model, full, true),
+  });
+
+  if (!res.ok || !res.body) {
+    throw new Error(`inference failed ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  }
+
+  let text = "";
+  const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += value;
+
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith("data:")) continue;
+      const data = trimmed.slice(5).trim();
+      if (data === "[DONE]") continue;
+      try {
+        const token = JSON.parse(data)?.choices?.[0]?.delta?.content;
+        if (typeof token === "string" && token) {
+          text += token;
+          onToken(token);
+        }
+      } catch {
+        // Ignore keep-alive and non-JSON frames.
+      }
+    }
+  }
+
+  return { text, sealed, attestationRef: sealed ? `att_${crypto.randomUUID()}` : undefined };
+}
+
+/**
+ * Harvest candidate extraction (§7.5.2), on the draft lane.
+ * Reads human `instruct` text ONLY — never agent answers (§7.5.3).
+ */
+export async function extractCandidates(
+  env: InferenceEnv,
+  humanLines: { eventId: string; seat: string; text: string }[]
+): Promise<{ eventId: string; seat: string; text: string }[]> {
+  if (humanLines.length === 0) return [];
+
+  const numbered = humanLines.map((l, i) => `${i + 1}. ${l.text}`).join("\n");
+  const messages: Msg[] = [
+    {
+      role: "system",
+      content:
+        "Select which of the numbered statements are durable knowledge worth teaching " +
+        "a team member permanently (rules, policies, standards, preferences). Exclude " +
+        "questions, chit-chat, and one-off task requests. Reply with ONLY a JSON array " +
+        'of objects: [{"n": <number>, "text": "<cleaned-up statement>"}]. No prose.',
+    },
+    { role: "user", content: numbered },
+  ];
+
+  const res = await fetch(`${env.ZG_ROUTER_URL}/chat/completions`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${env.ZG_ROUTER_KEY ?? ""}`,
+    },
+    body: bodyFor(env.ZG_DRAFT_MODEL, messages, false),
+  });
+
+  if (!res.ok) throw new Error(`extraction failed ${res.status}`);
+
+  const raw = (await res.json<any>())?.choices?.[0]?.message?.content ?? "[]";
+  const match = raw.match(/\[[\s\S]*\]/);
+  const picked: { n: number; text: string }[] = JSON.parse(match ? match[0] : "[]");
+
+  return picked
+    .map((p) => {
+      const src = humanLines[p.n - 1];
+      return src ? { eventId: src.eventId, seat: src.seat, text: p.text || src.text } : null;
+    })
+    .filter((x): x is { eventId: string; seat: string; text: string } => x !== null);
+}

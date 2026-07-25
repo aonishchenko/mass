@@ -1,0 +1,25 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "mass",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-07-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+
+  "durable_objects": {
+    "bindings": [{ "name": "SESSION", "class_name": "SessionRoom" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["SessionRoom"] }],
+
+  "assets": { "directory": "./web/dist", "binding": "ASSETS" },
+
+  "vars": {
+    // Non-secret config. Secrets (ZG_ROUTER_KEY, ZG_PRIVATE_KEY, SESSION_KEY)
+    // go in .dev.vars locally and `wrangler secret put` in prod.
+    "ZG_ROUTER_URL": "https://router-api-testnet.integratenetwork.work/v1",
+    "ZG_DRAFT_MODEL": "0GM-1.0-35B-A3B",
+    "ZG_CANONICAL_MODEL": "0GM-1.0-35B-A3B",
+    "ZG_STORAGE_RPC": "https://evmrpc-testnet.0g.ai",
+    "ZG_STORAGE_INDEXER": "https://indexer-storage-testnet-turbo.0g.ai"
+  }
+}

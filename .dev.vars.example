@@ -1,0 +1,17 @@
+# Copy to .dev.vars for local dev (gitignored). In prod use `wrangler secret put`.
+
+# 0G Router (testnet). Key from https://pc.testnet.0g.ai -> Dashboard -> API Keys.
+ZG_ROUTER_KEY=
+
+# Set to "true" once the direct-broker sealed path is wired, so the canonical
+# lane produces a real attestationRef. Set to "required" to make canonical THROW
+# rather than run degraded. Anything else = honest-degraded + honesty banner.
+ZG_SEALED=
+
+# 0G Storage: funded testnet wallet (faucet.0g.ai). No 0x prefix issues — ethers
+# accepts both. Used to sign brain + archive uploads.
+ZG_PRIVATE_KEY=
+
+# First-party encryption secret for brain + archive. Any high-entropy string.
+# Plaintext never reaches the 0G network.
+SESSION_KEY=
