@@ -864,7 +864,10 @@ export class SessionRoom extends DurableObject<Env> {
     const messages =
       lane === "canonical"
         ? [{ role: "user" as const, content: text }]
-        : [...this.recentTurns(), { role: "user" as const, content: text }];
+        : [
+            ...this.recentTurns(),
+            { role: "user" as const, content: text },
+          ];
 
     // Deltas fan out on the wire only. The full text goes in the completion
     // event, which is what makes the log replayable (§4.3).
@@ -873,7 +876,9 @@ export class SessionRoom extends DurableObject<Env> {
       lane,
       messages,
       this.session.brainChunks,
-      (token) => this.broadcast({ t: "delta", runId, token })
+      (token) => this.broadcast({ t: "delta", runId, token }),
+      // Interview turns swap the prompt, they do not stack with it.
+      lane === "draft" ? slot : undefined
     );
 
     await this.emit(
@@ -922,13 +927,40 @@ export class SessionRoom extends DurableObject<Env> {
   }
 
   /** Last few completed turns, so the agent has conversational context. */
+  /**
+   * Conversation history for a chat turn.
+   *
+   * Interview turns are EXCLUDED. Their prompt tells the agent not to refuse,
+   * and leaving them in history carried that permission into ordinary
+   * questions: with an empty brain the agent answered "the capital of Peru is
+   * Lima" instead of "I haven't been taught that yet". That refusal is the
+   * product's whole argument, so it must not be softened by a build-path
+   * detour. Both sides of the exchange go — the answer and the agent's reply
+   * to it.
+   */
   private recentTurns(): { role: "user" | "assistant"; content: string }[] {
+    const interviewRuns = new Set<string>();
+    for (const e of this.session.events) {
+      const p = e.payload as { slot?: string; instructId?: string; runId?: string };
+      if (e.type === "instruct" && p?.slot) interviewRuns.add(p.instructId ?? "");
+      if (
+        (e.type === "draft.started" || e.type === "canonical.started") &&
+        p?.instructId &&
+        interviewRuns.has(p.instructId)
+      ) {
+        interviewRuns.add(p.runId ?? "");
+      }
+    }
+
     const turns: { role: "user" | "assistant"; content: string }[] = [];
-    for (const e of this.session.events.slice(-40)) {
+    for (const e of this.session.events.slice(-60)) {
+      const p = e.payload as { slot?: string; text?: string; runId?: string };
       if (e.type === "instruct") {
-        turns.push({ role: "user", content: (e.payload as InstructPayload).text });
+        if (p?.slot) continue;
+        turns.push({ role: "user", content: p.text ?? "" });
       } else if (e.type === "draft.completed" || e.type === "canonical.completed") {
-        turns.push({ role: "assistant", content: (e.payload as { text: string }).text });
+        if (p?.runId && interviewRuns.has(p.runId)) continue;
+        turns.push({ role: "assistant", content: p.text ?? "" });
       }
     }
     return turns.slice(-8);
@@ -956,30 +988,6 @@ export class SessionRoom extends DurableObject<Env> {
       { contribId, verdict: verdict.verdict, attestationRef: verdict.attestationRef },
       { system: true }
     );
-
-    /**
-     * Build-path answers accept on one person's say-so.
-     *
-     * The workflow is an interview: the agent asks what it needs, one person
-     * answers. Holding that answer for a second signature stalls the interview
-     * on someone who may not even be in the room, and several people can still
-     * answer the same step — one is simply enough.
-     *
-     * Free-form contributions still take 2-of-M. Only the guided path is
-     * single-signature.
-     */
-    if (slot && verdict.verdict === "pass") {
-      await this.accept(contribId);
-      // The crew must SEE the agent take it in, otherwise answering feels like
-      // typing into a void. Running it through the brain (which now contains
-      // this answer) is what closes the loop.
-      await this.instruct(
-        `I just taught you: "${text}". In one or two sentences, confirm what you now know and what you still need.`,
-        "draft",
-        seat,
-        slot
-      );
-    }
 
     return contribId;
   }

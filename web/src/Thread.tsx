@@ -211,10 +211,16 @@ const InterviewCard: FC<{ view: SessionView; step: BuildStep; onDismiss: () => v
   step,
   onDismiss,
 }) => {
-  // What this step has collected, straight from the log. Build-path answers
-  // accept on one signature, so there is no pending state to show here.
-  const forStep = Object.values(view.contributions).filter((c) => c.slot === step.id);
-  const accepted = forStep.filter((c) => c.state === "accepted").length;
+  // Two different things, kept distinct on purpose:
+  //   answered — what the crew has said about this step (conversation)
+  //   taught   — what the crew reviewed and accepted into the brain
+  // An answer is not a teaching point until it survives review.
+  const answered = view.events.filter(
+    (e) => e.type === "instruct" && (e.payload as { slot?: string })?.slot === step.id
+  ).length;
+  const taught = Object.values(view.contributions).filter(
+    (c) => c.slot === step.id && c.state === "accepted"
+  ).length;
 
   return (
     <div className="mx-auto mb-3 w-full max-w-3xl rounded-xl border border-[var(--color-accent)]/30 bg-[var(--color-accent)]/8 px-4 py-3">
@@ -253,14 +259,16 @@ const InterviewCard: FC<{ view: SessionView; step: BuildStep; onDismiss: () => v
         taught that yet" is the agent refusing its own interview.
       */}
       <p className="pt-2 text-[11px] text-[var(--color-faint)]">
-        Type your answer below — the agent takes it in straight away and tells
-        you what it still needs. Anyone can answer, and several of you can.
+        Answer below and the agent responds. Answers are just conversation —
+        you decide together what actually gets taught when you review.
         — {step.doneWhen}
       </p>
 
-      {accepted > 0 && (
+      {(answered > 0 || taught > 0) && (
         <p className="pt-1 text-[11px] text-[var(--color-accent)]">
-          {accepted} answer{accepted === 1 ? "" : "s"} taught · needs {step.needs}
+          {answered} answered
+          {taught > 0 && ` · ${taught} taught`}
+          {` · needs ${step.needs}`}
         </p>
       )}
     </div>

@@ -46,19 +46,17 @@ export function MassRuntimeProvider({
       const part = message.content[0];
       const text = part?.type === "text" ? part.text : "";
       if (!text.trim()) return;
-      // While the agent is interviewing, what you type is an ANSWER, not a
-      // question. Routing it through the agent made every interview answer come
-      // back with "I haven't been taught that yet" — the agent asks something,
-      // you answer, and it tells you it doesn't know. So the answer goes
-      // straight to the crew for approval instead.
-      if (slot) {
-        send({ kind: "proposeContrib", text, source: "composer", slot });
-        return;
-      }
-      // Fire the intent only. The turn appears when the server emits `instruct`,
-      // so every client sees it at the same point in the log.
+      // A build-path answer is an ordinary message. It is NOT a signed teaching
+      // point: nothing enters the brain or the cap table without the crew
+      // reviewing it, so answers flow into the conversation and are picked up
+      // at harvest like anything else said in the room.
+      //
+      // The slot travels with it so the server can frame the turn as an answer
+      // rather than a question — otherwise the brain-only rule makes the agent
+      // refuse the very thing it just asked for.
+      //
       // Crew chat is always draft; the canonical lane belongs to a job.
-      send({ kind: "instruct", text, lane: "draft" });
+      send({ kind: "instruct", text, lane: "draft", slot });
     },
   });
 

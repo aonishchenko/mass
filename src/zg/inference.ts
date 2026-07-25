@@ -83,19 +83,29 @@ export function citationSystemPrompt(chunks: BrainChunk[]): Msg {
     ? `(per ${chunks[0].contributor}'s contribution #${chunks[0].contribNumber})`
     : "(per alice's contribution #1)";
 
+  // RULE 2 is omitted when the brain is empty. Measured: with it present and no
+  // chunks, "What is the capital of Peru?" answered "Lima"; without it, the
+  // agent refused correctly. The citation rule and its worked example imply
+  // there IS material to cite, which competes with the refusal rule — and the
+  // refusal is the product's whole argument, so it must win when there is
+  // nothing to cite.
+  const citationRule = chunks.length
+    ? "RULE 2: when your answer uses information from a brain chunk, you MUST " +
+      "write the citation immediately after that information, in the form " +
+      `${example} — copying the exact name and number from that chunk's ` +
+      "brackets. Never cite a name or number not listed above.\n"
+    : "";
+
   return {
     role: "system",
     content:
       "You are a team member built by a crew of humans.\n\nYOUR BRAIN:\n" +
-      (brain || "(empty)") +
+      (brain || "(empty — you have not been taught anything yet)") +
       "\n\nRULE 1: answer ONLY from the brain above. If the answer is not in it, " +
       `reply with exactly this and nothing else:\n"${UNTAUGHT}"\n` +
       "Never answer from your own training data. Never pad with generic advice. " +
       "Never mention your training cutoff.\n" +
-      "RULE 2: when your answer uses information from a brain chunk, you MUST " +
-      "write the citation immediately after that information, in the form " +
-      `${example} — copying the exact name and number from that chunk's ` +
-      "brackets. Never cite a name or number not listed above.\n" +
+      citationRule +
       "RULE 3: be brief. Answer in a few sentences unless asked for more.",
   };
 }
@@ -107,6 +117,29 @@ export function citationSystemPrompt(chunks: BrainChunk[]): Msg {
  * This sentence is also the product's whole argument in one line: the agent
  * knows what this crew taught it, and nothing else.
  */
+/**
+ * Framing for a build-path answer.
+ *
+ * The brain-only rule (citationSystemPrompt) makes the agent refuse anything it
+ * has not been taught — correct for questions, wrong for an interview answer,
+ * where it made the agent reply "I haven't been taught that yet" to the very
+ * thing it had just asked for. This turn is an ANSWER, so it acknowledges
+ * instead of refusing, without pretending the answer is already in its brain:
+ * nothing enters the brain until the crew accepts it at review.
+ */
+export const interviewFraming = (slot: string): Msg => ({
+  role: "system",
+  content:
+    "You are a team member being built by a crew of humans, and you are " +
+    `interviewing them about "${slot}".\n\n` +
+    "The message below is their ANSWER to your question. Do NOT refuse it, and " +
+    "do NOT say you have not been taught it — they are telling you right now.\n" +
+    "Reply in one or two sentences: acknowledge what they told you in your own " +
+    "words, then name the one thing still missing for this step.\n" +
+    "Do not claim it is saved. The crew reviews and accepts what actually gets " +
+    "taught, later.",
+});
+
 export const UNTAUGHT =
   "I haven't been taught that yet. Teach me and I'll know it next time.";
 
@@ -131,7 +164,14 @@ export async function runInference(
   lane: Lane,
   messages: Msg[],
   brainChunks: BrainChunk[],
-  onToken: (token: string) => void
+  onToken: (token: string) => void,
+  /**
+   * Build-path step being answered. REPLACES the brain-only system prompt
+   * rather than being appended to it: appending left "answer only from the
+   * brain, otherwise refuse" in place, and a small model obeys the first strong
+   * rule it reads — so the agent refused the very answer it had asked for.
+   */
+  interviewSlot?: string
 ): Promise<RunResult> {
   // Sealed only if a TEE-enclave key actually exists — a config flag alone must
   // never be enough to claim attestation (A3 honesty rule).
@@ -149,7 +189,27 @@ export async function runInference(
   // training data in quick mode and from the crew's knowledge in careful mode
   // is two different colleagues, and the refuse-teach-answer beat only works if
   // "I haven't been taught that" can happen in the mode people actually use.
-  const full = [citationSystemPrompt(brainChunks), ...messages];
+  /**
+   * An untaught agent refuses deterministically, without asking the model.
+   *
+   * "It knows only what this crew taught it" is the product's central claim, so
+   * it cannot rest on a small model obeying a prompt rule. Measured against
+   * qwen2.5-omni, the identical prompt refused on one run and answered "the
+   * capital of Peru is Lima" on the next — the wording was never the problem,
+   * the non-determinism was.
+   *
+   * With an empty brain there is nothing to answer FROM, so there is nothing to
+   * ask. Once chunks exist the model does the work and the prompt rules apply.
+   * Interview turns are exempt: they are answers, not questions.
+   */
+  if (!interviewSlot && brainChunks.length === 0) {
+    for (const word of UNTAUGHT.split(" ")) onToken(word + " ");
+    return { text: UNTAUGHT, sealed };
+  }
+
+  const full = interviewSlot
+    ? [interviewFraming(interviewSlot), ...messages]
+    : [citationSystemPrompt(brainChunks), ...messages];
 
   const res = await fetch(`${env.ZG_ROUTER_URL}/chat/completions`, {
     method: "POST",
