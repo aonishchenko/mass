@@ -167,16 +167,26 @@ export async function extractCandidates(
   const messages: Msg[] = [
     {
       role: "system",
+      // Measured against qwen2.5-omni on a real transcript. Two earlier phrasings
+      // returned [] for everything because "create a skill for X" reads as a task
+      // request — but in this product, defining a skill IS the teaching. The
+      // "would it be a better team member?" test is what fixed it.
+      //
+      // Tuned for PRECISION over recall: a missed line costs one click on
+      // "Teach this" beside the message, whereas a false positive is noise in
+      // the review, which is the thing harvest exists to remove.
       content:
-        "Below are things people said to an AI team member. Select the ones that are " +
-        "durable knowledge worth teaching it permanently: rules, policies, standards, " +
-        "preferences, facts about how this team works, and anything phrased as an " +
-        "instruction to remember. Exclude questions, small talk, and one-off task " +
-        "requests.\n\n" +
-        "Rewrite each selected item as a standalone statement, dropping conversational " +
-        'framing like "remember that" or "note this".\n\n' +
+        "Humans are teaching an AI team member. Below is what they said.\n\n" +
+        'For each line ask: "if the agent remembered this forever, would it be a ' +
+        'better team member?"\n' +
+        "- Yes -> keep it. Skill definitions, output formats, rules, standards, " +
+        'preferences all qualify, even when phrased as a request ("create a skill ' +
+        'for...", "the output should be...").\n' +
+        "- No -> drop it. Questions, requests for information, and chit-chat teach " +
+        "nothing.\n\n" +
+        "Rewrite each kept line as a standalone instruction.\n" +
         'Reply with ONLY a JSON array: [{"n": <number>, "text": "<statement>"}]. ' +
-        "No prose. If nothing qualifies, reply [].",
+        "No prose.",
     },
     { role: "user", content: numbered },
   ];

@@ -385,6 +385,38 @@ answers. Preserves the §7.2 invariant that a contribution is human authorship,
 and sidesteps the unanswerable question of which seat gets credit for something
 the model wrote. Kept candidates remain editable before proposal.
 
+### 7.5.3.1 Extraction FILTERS, and is tuned for precision
+
+An earlier revision had extraction only *pre-mark* candidates, showing every
+line, because a model that misjudged a line could otherwise cost someone a
+cap-table share with no way to override it.
+
+That reasoning no longer holds: **"Teach this" now sits under every message**
+(§7.3), so a missed line is one click away. With an escape hatch in place, the
+review should be short — listing back every question the crew asked is the
+review fatigue harvest exists to remove.
+
+So extraction filters, tuned for **precision over recall**:
+
+| Failure | Cost |
+|---|---|
+| misses a teachable line | one click on "Teach this" |
+| offers a question as a candidate | noise in the review — the original complaint |
+
+Two behaviours that must stay distinct:
+
+- extraction returned `[]` → a real answer ("none of this was teaching"); offer
+  nothing and let the crew use "Teach this".
+- extraction **threw** → no judgement was made; offer every line, because a
+  failure must not hide material the crew actually said.
+
+Prompt wording is load-bearing here in the same way §6.2.2 is. Measured against
+`qwen2.5-omni`: phrasings that excluded "one-off task requests" returned `[]`
+for everything, because *"create a skill for X"* reads as a task request — while
+in this product, defining a skill **is** the teaching. The wording that worked
+asks *"if the agent remembered this forever, would it be a better team member?"*
+Re-run the comparison if the model changes.
+
 ### 7.5.4 Selfie continuity on a batch
 
 B2.5 says re-verify on each accepted contribution. For a batch: **one continuity

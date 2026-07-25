@@ -560,20 +560,28 @@ export class SessionRoom extends DurableObject<Env> {
     // Extraction PRE-MARKS, it does not filter (§7.5.2). Every human line stays
     // on the list; suggestion only changes emphasis. A model that misjudges a
     // line must not be able to silently veto someone's contribution.
+    // "found nothing" and "broke" must behave differently: an empty result is a
+    // real answer (none of it was teaching), whereas a failure must not hide
+    // material the crew actually said.
     let suggestions = new Map<string, string>();
+    let extractionOk = false;
     if (this.env.ZG_ROUTER_KEY) {
       try {
         const extracted = await extractCandidates(this.env, humanLines);
         suggestions = new Map(extracted.map((e) => [e.eventId, e.text]));
+        extractionOk = true;
       } catch (err) {
-        console.error("extraction failed; every line stays selectable", err);
+        console.error("extraction failed; falling back to every line", err);
       }
     }
 
-    return humanLines.map((p) => {
+    const all = humanLines.map((p) => {
       const rewritten = suggestions.get(p.eventId);
       return {
-        candidateId: newId("cand"),
+        // Derived from the source event, NOT random: candidates are rebuilt on
+        // every reconnect, and a fresh random id would orphan the ids a client
+        // is already holding ("unknown candidate" on Keep).
+        candidateId: `cand_${p.eventId}`,
         text: rewritten ?? p.text,
         original: rewritten && rewritten !== p.text ? p.text : undefined,
         sourceEventId: p.eventId,
@@ -581,6 +589,13 @@ export class SessionRoom extends DurableObject<Env> {
         suggested: rewritten !== undefined,
       };
     });
+
+    // Show only what the model judged teachable. Listing every line back was
+    // right when harvest was the ONLY way in, but "Teach this" now sits under
+    // every message, so a missed line is one click away and the review stays
+    // short. Without a working extractor there is no judgement to apply, so
+    // everything stays selectable.
+    return extractionOk ? all.filter((c) => c.suggested) : all;
   }
 
   private async openHarvest(seat: Seat): Promise<number> {

@@ -43,19 +43,30 @@ export const Rail: FC<{ view: SessionView; send: (i: Intent) => void }> = ({ vie
         different rooms and each thinks the other is silent, which is exactly
         what happened in testing. Show the room and hand out its link.
       */}
-      <div className="flex items-center justify-between border-b border-[#1a1a18]/8 bg-[#1a1a18]/4 px-4 py-2">
-        <span className="truncate text-[11px] text-[var(--color-muted)]">
-          room <span className="font-mono text-[var(--color-ink)]">{sessionId}</span>
-        </span>
+      <div className="border-b border-[#1a1a18]/8 bg-[#1a1a18]/4 px-4 py-2">
+        <div className="flex items-center justify-between">
+          <span className="truncate text-[11px] text-[var(--color-muted)]">
+            room <span className="font-mono text-[var(--color-ink)]">{sessionId}</span>
+          </span>
+          <button
+            onClick={() => {
+              navigator.clipboard?.writeText(location.href);
+              setCopied(true);
+              setTimeout(() => setCopied(false), 2000);
+            }}
+            className="shrink-0 rounded-md border border-[#1a1a18]/20 px-2 py-1 text-[11px] hover:bg-white/60"
+          >
+            {copied ? "copied ✓" : "Copy invite link"}
+          </button>
+        </div>
         <button
           onClick={() => {
-            navigator.clipboard?.writeText(location.href);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
+            const id = Math.random().toString(36).slice(2, 8);
+            location.href = `${location.pathname}?session=${id}`;
           }}
-          className="shrink-0 rounded-md border border-[#1a1a18]/20 px-2 py-1 text-[11px] hover:bg-white/60"
+          className="mt-2 w-full rounded-md border border-[#1a1a18]/20 py-1.5 text-[11.5px] hover:bg-white/60"
         >
-          {copied ? "copied ✓" : "Copy invite link"}
+          Start a new session
         </button>
       </div>
 
@@ -110,8 +121,8 @@ export const Rail: FC<{ view: SessionView; send: (i: Intent) => void }> = ({ vie
       <Section icon={<SproutIcon size={12} />} title="Awaiting co-sign">
         {pending.length === 0 && (
           <p className="text-[11.5px] leading-snug text-[var(--color-muted)]">
-            Nothing proposed yet. Hover any message you sent and choose{" "}
-            <em>Teach this</em>, or harvest the whole conversation below.
+            Nothing proposed yet. Use <em>Teach this</em> under any message you
+            sent, or harvest the conversation below.
           </p>
         )}
 
@@ -180,9 +191,9 @@ export const Rail: FC<{ view: SessionView; send: (i: Intent) => void }> = ({ vie
         ) : (
           <>
             <p className="pb-2 text-[11.5px] leading-snug text-[var(--color-muted)]">
-              Everything you said, suggestions first. <strong>Keep</strong> proposes
-              a line for the brain; it only counts once two signers co-sign the
-              batch below.
+              What looks worth teaching. <strong>Keep</strong> proposes a line for
+              the brain; it counts once two signers co-sign the batch. Missed
+              something? Use <em>Teach this</em> on the message itself.
             </p>
             <ul className="space-y-1.5">
               {[...view.candidates]
@@ -263,15 +274,9 @@ export const Rail: FC<{ view: SessionView; send: (i: Intent) => void }> = ({ vie
 
       <div className="mt-auto px-4 py-3">
         {view.closed ? (
-          <button
-            onClick={() => {
-              const id = Math.random().toString(36).slice(2, 8);
-              location.href = `${location.pathname}?session=${id}`;
-            }}
-            className="w-full rounded-md bg-[var(--color-ink)] py-1.5 text-[var(--color-cream)] hover:opacity-85"
-          >
-            Start a new session
-          </button>
+          <p className="text-center text-[11.5px] text-[var(--color-muted)]">
+            Session closed. Start a new one from the top of this panel.
+          </p>
         ) : (
           <>
             <button
