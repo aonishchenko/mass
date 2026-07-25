@@ -46,7 +46,11 @@ export type EventType =
   | "archive.written"
   | "harvest.opened"
   | "harvest.closed"
-  | "harvest.cancelled";
+  | "harvest.cancelled"
+  // hedera-spec §9
+  | "job.settled"
+  | "payout"
+  | "hcs.anchored";
 
 export type Actor =
   | { seat: string; tier: Tier }

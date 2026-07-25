@@ -29,6 +29,13 @@ import {
 import { extractCandidates, runInference } from "./zg/inference.js";
 import { writeArchive, writeBrain } from "./zg/storage.js";
 import { mockScreen } from "./world/mock.js";
+import {
+  anchorEvent,
+  hederaEnabled,
+  payForInference,
+  shouldAnchor,
+} from "./hedera/client.js";
+import { payloadHash as hashOf } from "./core/ids.js";
 
 export interface Env {
   SESSION: DurableObjectNamespace<SessionRoom>;
@@ -45,6 +52,11 @@ export interface Env {
   SESSION_KEY?: string;
   ZG_STORAGE_SERVICE_URL?: string;
   STORAGE_AUTH_TOKEN?: string;
+  HEDERA_TOPIC_ID?: string;
+  HEDERA_OPERATOR_ID?: string;
+  HEDERA_COMPUTE_ACCOUNT_ID?: string;
+  HEDERA_CAPTABLE_TOKEN_ID?: string;
+  HEDERA_INFERENCE_PRICE_HBAR?: string;
 }
 
 interface SocketMeta {
@@ -212,6 +224,28 @@ export class SessionRoom extends DurableObject<Env> {
     );
     this.session = append(this.session, event);
     this.broadcast({ t: "event", e: event });
+
+    // Anchor AFTER broadcasting. HCS consensus takes seconds; the session must
+    // never wait on it, and a failed anchor must not lose a local event
+    // (hedera-spec §4.2).
+    if (shouldAnchor(type) && hederaEnabled(this.env)) {
+      this.ctx.waitUntil(
+        anchorEvent(this.env, event)
+          .then((r) =>
+            this.emit(
+              "hcs.anchored",
+              {
+                eventId: event.id,
+                topicSequenceNumber: r.sequenceNumber,
+                hederaTxId: r.txId,
+              },
+              { system: true }
+            )
+          )
+          .catch((err) => console.error("[hedera] anchor failed", type, String(err).slice(0, 160)))
+      );
+    }
+
     return event;
   }
 
@@ -379,8 +413,34 @@ export class SessionRoom extends DurableObject<Env> {
       { agent: true }
     );
 
-    if (lane === "canonical" && result.sealed) {
-      await this.emit("payment.executed", { kind: "inference", hederaTxId: "mock_tx" }, { system: true });
+    // HARD REQUIREMENT 1 — the agent pays for its own canonical run. Draft runs
+    // are free, matching the lane split (shared-session-spec §6).
+    if (lane === "canonical") {
+      await this.payForCanonicalRun(messages.map((m) => m.content).join("\n"));
+    }
+  }
+
+  /**
+   * hedera-spec §5.1. The memo is the inference request hash (x402), which is
+   * what lets anyone take a payloadHash off HCS and find the payment that
+   * settled it. Never fabricate a tx id: a failed payment emits nothing.
+   */
+  private async payForCanonicalRun(requestBody: string) {
+    const to = this.env.HEDERA_COMPUTE_ACCOUNT_ID;
+    if (!hederaEnabled(this.env) || !to) return;
+
+    const requestHash = (await hashOf(requestBody)).slice(0, 32);
+    const amountHbar = Number(this.env.HEDERA_INFERENCE_PRICE_HBAR ?? "0.1");
+
+    try {
+      const r = await payForInference(this.env, { to, amountHbar, requestHash });
+      await this.emit(
+        "payment.executed",
+        { kind: "inference", hederaTxId: r.txId, amount: amountHbar, requestHash },
+        { system: true }
+      );
+    } catch (err) {
+      console.error("[hedera] inference payment failed", String(err).slice(0, 160));
     }
   }
 

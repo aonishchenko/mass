@@ -25,3 +25,20 @@ ZG_PRIVATE_KEY=
 # First-party encryption secret for brain + archive. Any high-entropy string.
 # Plaintext never reaches the 0G network.
 SESSION_KEY=
+
+# ---- Hedera (hedera-spec.md §3) ----
+# Testnet account from https://portal.hedera.com — ECDSA or ED25519, DER or hex.
+# Funds the treasury, pays all fees, and is the operator for every write.
+HEDERA_OPERATOR_ID=
+HEDERA_OPERATOR_KEY=
+
+# Set after the first createTopic(); one topic per agent.
+HEDERA_TOPIC_ID=
+
+# Where pay-per-inference sends its HBAR (the compute provider).
+# A second testnet account is fine for the demo.
+HEDERA_COMPUTE_ACCOUNT_ID=
+HEDERA_INFERENCE_PRICE_HBAR=0.1
+
+# Set after the first mintCapTable().
+HEDERA_CAPTABLE_TOKEN_ID=
