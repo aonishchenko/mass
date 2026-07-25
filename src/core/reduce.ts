@@ -27,8 +27,14 @@ import type {
 
 export function apply(s: Session, e: MassEvent): Session {
   switch (e.type) {
-    case "session.created":
-      return { ...s, created: true };
+    case "session.created": {
+      // Restore the id from the log, not just the flag. Rebuilding state after a
+      // DO restart used to leave sessionId as "pending" forever, because
+      // bootstrap only runs when `created` is false — so anything keyed on the
+      // session id (token binding, the CV lookup) saw the wrong room.
+      const p = e.payload as { sessionId?: string } | undefined;
+      return { ...s, created: true, sessionId: p?.sessionId ?? s.sessionId };
+    }
 
     case "seat.claimed": {
       const p = e.payload as SeatClaimedPayload;

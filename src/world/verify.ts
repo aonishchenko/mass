@@ -132,6 +132,8 @@ export async function verifyWorldProof(
   env: WorldEnv,
   kind: VerifyKind,
   proof: WorldProof | null | undefined
+,
+  envOverride?: string
 ): Promise<VerifyOutcome> {
   const verifiedAt = Date.now();
   const fail = (error: string, raw: unknown = null): VerifyOutcome => ({
@@ -147,23 +149,30 @@ export async function verifyWorldProof(
 
   if (!proof) return fail("missing proof");
 
-  // DEV FALLBACK: only when there is no real app AND it is explicitly enabled.
-  // Lets the crew rehearse the full arc (and CI exercise the logic) without
-  // World credentials. Structurally impossible once the portal is wired.
+  // DEV BYPASS: requires the server secret WORLD_DEV_FALLBACK=1 AND an
+  // explicitly dev-marked proof. A client can never grant itself this — the
+  // secret is the gate.
+  //
+  // Checked BEFORE worldConfigured on purpose. It used to sit inside the
+  // "no app configured" branch, which made the bypass unreachable the moment
+  // the portal was wired — exactly when a broken World path most needs a way
+  // to keep rehearsing. Every such result is marked dev:true and the UI shows
+  // the amber banner. MUST be unset for judging.
+  if (env.WORLD_DEV_FALLBACK === "1" && proof.dev === true) {
+    const cred = proof.responses?.[0]?.identifier ?? (kind === "agentkit" ? "orb" : "selfie");
+    const nullifier = proof.responses?.[0]?.nullifier ?? `dev_${kind}_${cred}`;
+    return {
+      ok: true,
+      nullifierHash: nullifier,
+      credential: cred,
+      sybilScore: deriveSybilScore(cred),
+      verifiedAt,
+      dev: true,
+      raw: { dev: true, note: "DEV BYPASS — proof NOT verified against World" },
+    };
+  }
+
   if (!worldConfigured(env)) {
-    if (env.WORLD_DEV_FALLBACK === "1" && proof.dev === true) {
-      const cred = proof.responses?.[0]?.identifier ?? (kind === "agentkit" ? "orb" : "selfie");
-      const nullifier = proof.responses?.[0]?.nullifier ?? `dev_${kind}_${cred}`;
-      return {
-        ok: true,
-        nullifierHash: nullifier,
-        credential: cred,
-        sybilScore: deriveSybilScore(cred),
-        verifiedAt,
-        dev: true,
-        raw: { dev: true, note: "DEV FALLBACK — proof NOT verified against World" },
-      };
-    }
     return fail("World not configured (set WORLD_APP_ID and WORLD_RP_ID)");
   }
 
@@ -182,7 +191,7 @@ export async function verifyWorldProof(
     protocol_version: proof.protocol_version ?? "3.0",
     nonce: proof.nonce,
     action,
-    environment: env.WORLD_ENV ?? proof.environment ?? "production",
+    environment: envOverride ?? proof.environment ?? env.WORLD_ENV ?? "production",
     responses,
   };
 
@@ -191,7 +200,15 @@ export async function verifyWorldProof(
   try {
     const res = await fetch(url, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        // Cloudflare Workers send no User-Agent by default, and World's edge
+        // answers such requests with a bare 403 HTML page — before the proof is
+        // ever looked at. Every verification failed this way, and the empty
+        // body made it look like an application-level rejection.
+        "user-agent": "MASS/1.0 (+https://mass.aonishchenko33.workers.dev)",
+        accept: "application/json",
+      },
       body: JSON.stringify(body),
     });
     status = res.status;
@@ -220,7 +237,11 @@ export async function verifyWorldProof(
     dev: false,
     error: success
       ? undefined
-      : String(json.detail ?? json.code ?? `verification failed (HTTP ${status})`),
+      : String(
+          json.detail ??
+            json.code ??
+            `World rejected the proof (HTTP ${status}) for environment "${body.environment}", action "${action}". An empty 403 usually means the action does not exist in the Developer Portal, or the app is not approved for this credential.`
+        ),
     raw: sanitizeRaw(json, status),
   };
 }
@@ -261,6 +282,12 @@ export interface TokenClaims {
   verifiedAt: number;
   exp: number;
   dev: boolean;
+  /**
+   * The session this proof was verified for. Without it, one verification is a
+   * skeleton key: a token minted for room A would seat its holder in every other
+   * room for the whole TTL. The DO rejects a token issued for a different room.
+   */
+  session: string;
 }
 
 function b64url(bytes: Uint8Array): string {
@@ -289,8 +316,13 @@ async function hmacKey(env: WorldEnv): Promise<CryptoKey> {
   );
 }
 
-/** Mint a signed token from a successful verification. */
-export async function issueToken(env: WorldEnv, kind: VerifyKind, outcome: VerifyOutcome): Promise<string> {
+/** Mint a signed token from a successful verification, bound to one session. */
+export async function issueToken(
+  env: WorldEnv,
+  kind: VerifyKind,
+  outcome: VerifyOutcome,
+  session: string
+): Promise<string> {
   if (!outcome.ok || !outcome.nullifierHash) throw new Error("cannot issue token for a failed verification");
   const claims: TokenClaims = {
     kind,
@@ -300,6 +332,7 @@ export async function issueToken(env: WorldEnv, kind: VerifyKind, outcome: Verif
     verifiedAt: outcome.verifiedAt,
     exp: outcome.verifiedAt + TOKEN_TTL_MS,
     dev: outcome.dev,
+    session,
   };
   const key = await hmacKey(env);
   const payload = new TextEncoder().encode(JSON.stringify(claims));

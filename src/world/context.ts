@@ -40,7 +40,11 @@ export type ContextResponse =
  * - No app, DEV enabled → { dev:true }; the client uses the marked dev path.
  * - No app / no key     → an explicit error the UI can show.
  */
-export function buildContext(env: WorldEnv, kind: VerifyKind): ContextResponse {
+export function buildContext(
+  env: WorldEnv,
+  kind: VerifyKind,
+  overrides: { environment?: string; preset?: string } = {}
+): ContextResponse {
   if (!worldConfigured(env)) {
     if (env.WORLD_DEV_FALLBACK === "1") return { configured: false, dev: true };
     return {
@@ -60,7 +64,8 @@ export function buildContext(env: WorldEnv, kind: VerifyKind): ContextResponse {
 
   // WORLD_SELFIE_PRESET=orb makes the Builder tier use Orb instead of the
   // partner-gated Selfie Check — needed when only the simulator is available.
-  const selfiePreset = env.WORLD_SELFIE_PRESET === "orb" ? "orb" : "selfie";
+  const selfiePreset =
+    (overrides.preset ?? env.WORLD_SELFIE_PRESET) === "orb" ? "orb" : "selfie";
 
   const action = actionFor(env, kind);
   const sig = signRequest({ signingKeyHex: env.WORLD_RP_PRIVATE_KEY, action });
@@ -70,7 +75,7 @@ export function buildContext(env: WorldEnv, kind: VerifyKind): ContextResponse {
     selfiePreset,
     app_id: env.WORLD_APP_ID!,
     action,
-    environment: env.WORLD_ENV ?? "production",
+    environment: overrides.environment ?? env.WORLD_ENV ?? "production",
     rp_context: {
       rp_id: env.WORLD_RP_ID!,
       nonce: sig.nonce,

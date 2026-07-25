@@ -50,7 +50,7 @@ export const EnsPanel: FC<{ sessionId: string; closed: boolean }> = ({ sessionId
         Resolves to a full employment record — skills, teachers, owners, brain hash.
       </p>
       <a
-        href={`/cv/${encodeURIComponent(profile.name)}`}
+        href={`/cv/${encodeURIComponent(profile.name)}?session=${encodeURIComponent(sessionId)}`}
         target="_blank"
         rel="noreferrer"
         className="mt-2 inline-block rounded-md border border-[#1a1a18]/20 px-2 py-1 text-[11.5px] hover:bg-white/60"

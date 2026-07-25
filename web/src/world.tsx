@@ -23,6 +23,20 @@ import {
 
 export type VerifyKind = "selfie" | "agentkit";
 
+/**
+ * One attempt's configuration. Exposed in the UI so a failing combination can
+ * be isolated by clicking, instead of by editing config and redeploying —
+ * which is far too slow when the error is an opaque 403.
+ */
+export interface VerifyOptions {
+  /** Override the server's WORLD_ENV for this attempt. */
+  environment?: "production" | "staging";
+  /** Force the Builder-tier credential (Selfie Check is partner-gated). */
+  preset?: "orb" | "selfie";
+  /** Skip World entirely. Marked dev, never verified, banner shown. */
+  dev?: boolean;
+}
+
 export interface VerifyResult {
   token: string;
   sybilScore?: number;
@@ -40,17 +54,32 @@ interface WidgetConfig {
   action: string;
   rp_context: RpContext;
   preset: Preset;
+  /**
+   * IDKit defaults `environment` to "production". Not forwarding the server's
+   * value meant the browser produced production proofs while the server signed
+   * and verified as staging — which surfaced as an opaque 403 from our verify
+   * endpoint, and as "Production request detected" in the simulator. Client and
+   * server must always read this from the same place.
+   */
+  environment: "production" | "staging" | "sandbox";
   /** Server-side override so the Builder tier can fall back to Orb. */
   selfiePreset?: "orb" | "selfie";
 }
 
 const qs = (sessionId: string) => `session=${encodeURIComponent(sessionId)}`;
 
-async function postProof(sessionId: string, kind: VerifyKind, proof: unknown) {
+async function postProof(
+  sessionId: string,
+  kind: VerifyKind,
+  proof: unknown,
+  env?: string
+) {
   const res = await fetch(`/api/verify/${kind}?${qs(sessionId)}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ proof }),
+    // Send the environment the proof was produced with, so the server verifies
+    // against the same one. A mismatch here is what produced the opaque 403.
+    body: JSON.stringify({ proof, env }),
   });
   const j = (await res.json().catch(() => ({}))) as {
     ok?: boolean;
@@ -72,23 +101,29 @@ export function useWorldVerify(sessionId: string) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const pending = useRef<Deferred | null>(null);
+  const lastOpts = useRef<VerifyOptions>({});
 
   const verify = useCallback(
-    async (kind: VerifyKind): Promise<VerifyResult> => {
+    async (kind: VerifyKind, opts: VerifyOptions = {}): Promise<VerifyResult> => {
       setBusy(true);
       try {
-        const ctx = (await (await fetch(`/api/verify/context?kind=${kind}&${qs(sessionId)}`)).json()) as
+        const params = new URLSearchParams({ kind, session: sessionId });
+        if (opts.environment) params.set("env", opts.environment);
+        if (opts.preset) params.set("preset", opts.preset);
+        const ctx = (await (await fetch(`/api/verify/context?${params}`)).json()) as
           | {
               configured: true;
               app_id: string;
               action: string;
+              environment?: "production" | "staging" | "sandbox";
               rp_context: RpContext;
               selfiePreset?: "orb" | "selfie";
             }
           | { configured: false; dev?: boolean; error?: string };
 
-        // DEV fallback: no World app. Proof is explicitly marked and unverified.
-        if (!ctx.configured && ctx.dev) {
+        // DEV bypass: explicitly requested, or offered because no World app is
+        // configured. Always marked `dev` so the UI can say so.
+        if (opts.dev || (!ctx.configured && ctx.dev)) {
           const identifier = kind === "agentkit" ? "orb" : "selfie";
           const proof = {
             dev: true,
@@ -102,7 +137,7 @@ export function useWorldVerify(sessionId: string) {
               },
             ],
           };
-          const r = await postProof(sessionId, kind, proof);
+          const r = await postProof(sessionId, kind, proof, opts.environment);
           setBusy(false);
           return { ...r, dev: true };
         }
@@ -115,9 +150,11 @@ export function useWorldVerify(sessionId: string) {
         // Real IDKit flow — resolve when the widget's onSuccess fires.
         return await new Promise<VerifyResult>((resolve, reject) => {
           pending.current = { kind, resolve, reject };
+          lastOpts.current = opts;
           setCfg({
             app_id: ctx.app_id as `app_${string}`,
             action: ctx.action,
+            environment: opts.environment ?? ctx.environment ?? "production",
             rp_context: ctx.rp_context,
             /**
              * Selfie Check is partner-gated and is not guaranteed to exist in
@@ -149,7 +186,7 @@ export function useWorldVerify(sessionId: string) {
       setOpen(false);
       if (!cur) return;
       try {
-        const r = await postProof(sessionId, cur.kind, result);
+        const r = await postProof(sessionId, cur.kind, result, lastOpts.current.environment);
         cur.resolve(r);
       } catch (e) {
         cur.reject(e instanceof Error ? e : new Error(String(e)));
@@ -175,6 +212,7 @@ export function useWorldVerify(sessionId: string) {
       app_id={cfg.app_id}
       action={cfg.action}
       rp_context={cfg.rp_context}
+      environment={cfg.environment}
       allow_legacy_proofs
       preset={cfg.preset}
       onSuccess={onSuccess}
