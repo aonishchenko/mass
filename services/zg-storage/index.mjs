@@ -16,6 +16,7 @@
 import { createServer } from "node:http";
 import { Indexer, MemData } from "@0gfoundation/0g-storage-ts-sdk";
 import { ethers } from "ethers";
+import * as hedera from "./hedera.mjs";
 
 const PORT = process.env.PORT || 8080;
 const RPC = process.env.ZG_STORAGE_RPC || "https://evmrpc-testnet.0g.ai";
@@ -46,7 +47,11 @@ const json = (res, status, body) => {
 const server = createServer(async (req, res) => {
   try {
     if (req.method === "GET" && req.url === "/health") {
-      return json(res, 200, { ok: true, address: await signer.getAddress() });
+      return json(res, 200, {
+        ok: true,
+        address: await signer.getAddress(),
+        hedera: hedera.hederaConfigured(),
+      });
     }
 
     if (req.headers.authorization !== `Bearer ${AUTH}`) {
@@ -76,6 +81,31 @@ const server = createServer(async (req, res) => {
 
       res.writeHead(200, { "content-type": "application/octet-stream" });
       return res.end(Buffer.from(await blob.arrayBuffer()));
+    }
+
+    // ---- Hedera writes (hedera-spec §2.1: gRPC, so it cannot live in a Worker)
+    if (req.method === "POST" && req.url?.startsWith("/hedera/")) {
+      if (!hedera.hederaConfigured()) {
+        return json(res, 503, { error: "hedera not configured on the sidecar" });
+      }
+      const op = req.url.slice("/hedera/".length);
+      const body = (await readBody(req)).toString() || "{}";
+      const args = JSON.parse(body);
+
+      const ops = {
+        "create-topic": () => hedera.createTopic(args.memo),
+        "submit-event": () => hedera.submitEvent(args.topicId, args.event),
+        "pay-inference": () => hedera.payForInference(args),
+        "payout-split": () => hedera.payoutSplit(args),
+        "create-account": () => hedera.createAccount(args),
+        "create-captable-token": () => hedera.createCapTableToken(args),
+        "mint-captable": () => hedera.mintCapTable(args),
+        "announce-identity": () => hedera.announceAgentIdentity(args.topicId, args.meta),
+      };
+
+      const handler = ops[op];
+      if (!handler) return json(res, 404, { error: `unknown hedera op: ${op}` });
+      return json(res, 200, await handler());
     }
 
     json(res, 404, { error: "not found" });

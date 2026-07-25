@@ -254,6 +254,7 @@ We keep our claims tight and honest:
 |------|---------|
 | [MASS-specs.md](./MASS-specs.md) | v0.7 git-native single source of truth — positioning, authority model, interface contracts, module cards, feature register, merge points, timeline |
 | [shared-session-spec.md](./shared-session-spec.md) | Session core module — WS protocol, event sourcing & replay, draft/canonical lanes, contribution lifecycle, 0G brain + archive |
+| [hedera-spec.md](./hedera-spec.md) | Hedera module — HCS provenance ledger, pay-per-inference, the payroll split, HTS cap table |
 | [AGENT.md](./AGENT.md) | The weekend's agent — the Technical Documentation Writer: what it is, entry point, what earns ownership |
 | [BUILD-PATH.md](./BUILD-PATH.md) | The guided flow that turns a session into a complete agent (the twelve slots) |
 | [BUILD-PATH.json](./BUILD-PATH.json) | Slot data + facilitation prompts driving the Build Path (readiness is derived, not stored) |

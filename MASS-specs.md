@@ -4,6 +4,10 @@
 **EXECUTION: follow TASKBOARD.md (hour-by-hour run plan + role split). This file is reference only from here on.**
 **This file is the single source of truth. Companion files: TASKBOARD.md (hour-by-hour run plan + roles), AGENT-ANATOMY.md (what an agent is made of), SUBPROJECT-PROOF-OF-TEACHING.md v3 (ownership + royalties, decisions locked), EMPLOYMENT-LAYER.md (taking work from OKX AI / Virtuals ACP), BUILD-PATH.md (the guided flow that completes an agent), LISTING-ON-VIRTUALS-ACP.md (putting the agent to work), MARKETPLACE-EARNINGS.md (reading its earnings), PITCH.md (4-min pitch + Q&A bank), world-testing-template.md (World deliverable), SUBMISSION-PACK.md (README/demo/booth/checklists).**
 
+**IMPLEMENTATION MODULE SPECS (own their internals; this file keeps only what other modules must know):**
+**[shared-session-spec.md](./shared-session-spec.md) — M0+M2+M6 session core: WS protocol, event-sourced replay, draft/canonical lanes, contribution lifecycle + harvest, 0G brain/archive.**
+**[hedera-spec.md](./hedera-spec.md) — M4: HCS provenance ledger, pay-per-inference, the payroll split, HTS cap table. Read its §2 first — four platform constraints that change the plan.**
+
 ---
 
 # PART A — WHAT WE ARE BUILDING (read once together, 10 min)
@@ -250,14 +254,15 @@ DoD: two real humans reach T2 in-flow; proofs verified server-side
 (code shown at pitch); testing doc >=10 dated entries.
 
 ### M4 HEDERA (T) — needs M0; real wire at MP2
-Base from scaffold-har (x402 + payments-scheduler templates) + skills plugin
-+ Docs MCP installed tonight. logEvent → HCS (hash-only) + Mirror Node
-read-back drives ticker. payForInference per canonical run.
-First Job (B2.1): receiveJobPayment + payoutSplit per cap table.
-mintCapTable with royalty fee schedule. announceHcs14. scheduleExpiry
-(build-only, HashScan link). B3.2 stretch: registerErc8004.
-DoD: HashScan topic matches local ids; payment per canonical inference;
-scripted-log mint allocates correctly; validate-submission run at freeze.
+**Owned by [hedera-spec.md](./hedera-spec.md).** Base from scaffold-har
+(x402 pay-per-use template). Three constraints other modules must know:
+- Hedera writes run in the **Railway chain sidecar**, not in the Worker — the
+  SDK needs gRPC. Mirror Node REST reads DO run in the Worker (spec §2.1).
+- The cap-table token carries a **fractional** fee schedule, not a royalty one:
+  CustomRoyaltyFee is NFT-only. Say "fractional", never "royalty" (§2.2).
+- HCS carries **hash-only** projections of C1 events. Never content, names or
+  document text (§4.1).
+DoD: hedera-spec §11.
 
 ### M5 ENS (N) — needs M0 only
 `[ENS NET: ____]` (booth). Parent name via ens-cli script. Seats via DURIN;
