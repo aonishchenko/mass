@@ -39,6 +39,8 @@ interface Stats {
   /** Session-derived, present only when a session is supplied. */
   contributionsAccepted?: number;
   citationsServed?: number;
+  /** Selected for anchoring, not yet confirmed by the network. */
+  unanchoredEvents?: number;
 }
 
 const consensusToLocal = (ts: string) =>
@@ -157,6 +159,19 @@ export const HederaPanel: FC<{ eventCount: number; anchorable: number }> = ({
       {pending > 0 && (
         <p className="pb-1 text-[11px] text-amber-700">
           {pending} event{pending === 1 ? "" : "s"} awaiting consensus…
+        </p>
+      )}
+
+      {/* Shown only when it is real. A record we meant to anchor but could not
+          means the public ledger and this screen disagree — the person whose
+          contribution it was would otherwise silently lose their share. */}
+      {(stats?.unanchoredEvents ?? 0) > 0 && (
+        <p
+          className="pb-1 text-[11px] text-red-700"
+          title="These are queued and retried automatically. Until they land, the public ledger is missing them."
+        >
+          {stats!.unanchoredEvents} record
+          {stats!.unanchoredEvents === 1 ? "" : "s"} not yet on-chain
         </p>
       )}
 

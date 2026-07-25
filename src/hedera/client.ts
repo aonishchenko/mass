@@ -86,6 +86,18 @@ function publicRefs(event: MassEvent): Record<string, string | undefined> {
     // it is the one event the cap table counts. The credited seat lives in its
     // payload, and without publishing it the cap table stays underivable.
     seat: pick("seat"),
+    /**
+     * A stable, opaque handle for the VERIFIED HUMAN behind a seat: a truncated
+     * hash of their World nullifier.
+     *
+     * A seat id is random and per-session, so the public log could show that
+     * "some seat" earned a share but never that the same person earned two, or
+     * that two seats are one human. Ownership has to key to something that
+     * identifies a unique human and cannot be edited by its owner. The value is
+     * hashed and truncated so it correlates within our topic without becoming a
+     * cross-app identifier for that person.
+     */
+    humanRef: pick("humanRef"),
   };
 }
 

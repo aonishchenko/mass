@@ -2,6 +2,12 @@
 ## Where the numbers live, what to watch, and how marketplace revenue becomes contributor payouts
 **Verify in the live tools before quoting a number. Dashboards and endpoints change.**
 
+> **STATUS: this document is the design, not the build.** As of today the code
+> computes ownership as *share of accepted contributions* and does **not** run
+> payouts: the `0.30 × authorship + 0.70 × usage` formula, the Authorship Map,
+> `scripts/authorship.mjs`, and the marketplace listing described below are all
+> specified and unbuilt. Nothing here should be quoted as a live capability.
+
 ---
 
 ## 0. THREE PLACES THE TRUTH LIVES
