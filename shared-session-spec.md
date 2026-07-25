@@ -20,7 +20,8 @@ Master Part E labels MP1 the safety floor; this slice is the floor *beneath*
 that one — it needs no sponsor integration at all to be demoable.
 
 **In scope:** session state, WS protocol, authority evaluation, both inference
-lanes, contribution lifecycle, brain writes to 0G Storage, session archive.
+lanes, contribution lifecycle in both review modes (live acceptance + batch
+harvest, mid-session and at close), brain writes to 0G Storage, session archive.
 **Out of scope:** server-side World verification (M3), HCS logging (M4), ENS
 naming (M5), minting and First Job (M7).
 
@@ -71,8 +72,11 @@ type Intent =
   | { kind: "proposeContrib"; text: string; source: ContribSource }
   | { kind: "challengeContrib"; contribId: string; reason: string }
   | { kind: "cosign";        contribId: string }
-  | { kind: "openHarvest" }
-  | { kind: "closeSession" };
+  | { kind: "openHarvest" }                       // any time — §7.5.1
+  | { kind: "keepCandidate"; harvestId: string; candidateId: string; text: string }
+  | { kind: "cosignBatch";   harvestId: string }  // 2-of-M over the whole batch
+  | { kind: "cancelHarvest"; harvestId: string }
+  | { kind: "closeSession" };                     // rejected if a harvest is open
 
 // 2. server → all clients. two frame types, only one is durable.
 type Frame =
@@ -291,7 +295,7 @@ verbose. **The accept gate is what makes a share earned rather than emitted.**
 |---|---|---|
 | Composer — primary | `"composer"` | any time; always-present "Teach the agent —" panel |
 | Promote an answer | `"draft"` | hover an answer → opens composer prefilled + editable |
-| Batch harvest | `"harvest"` | at session close, see §7.5 |
+| Batch harvest | `"harvest"` | any time mid-session, and auto-offered at close — see §7.5 |
 
 ## 7.4 States
 
@@ -306,32 +310,79 @@ proposed ──challenged──> challenged ──resolved──> proposed
 - `contrib.screened` (immune system, master B2.2) runs **before** acceptance;
   its verdict is logged either way.
 - Selfie continuity ping (B2.5) fires on `contrib.accepted`, so a share cannot
-  be claimed from an unattended device.
+  be claimed from an unattended device. Batch variant: §7.5.4.
 - Acceptance is **never blocked on storage**. See §8.2.
+- Identical for live and harvested contributions — only the entry point differs.
 
-## 7.5 Mid-session vs end-of-session review
+## 7.5 Two review modes — BOTH ARE BUILT
 
-Two review modes. Both are specified; **build only the first this weekend.**
+**A. Live acceptance.** Propose → co-sign 2-of-M in front of the crew → accepted
+→ brain updated, immediately. The demo beat in master [A6](./MASS-specs.md), and
+what selfie continuity attaches to.
 
-**A. Live acceptance (mid-session) — BUILD THIS.**
-Contribution proposed, co-signed 2-of-M in front of the crew, accepted, brain
-updated. This is the demo beat in master [A6](./MASS-specs.md), and it is what
-selfie continuity hangs on.
+**B. Batch harvest.** Review many candidates at once, co-sign the batch, one
+brain write. The answer to review fatigue — continuous "is this worth teaching?"
+is too much cognitive load for a working session.
 
-**B. Batch harvest (end-of-session) — SPEC ONLY, roadmap.**
-At `closeSession()`, before the Birth sequence: open a harvest view over the
-session archive with candidate extractions pre-marked. The crew reviews once,
-keeps ~5, edits 2, drops the rest, then co-signs the batch. **One batched
-decision per session instead of N decisions per message.**
+They are not alternatives and not two systems. **Harvest is the same lifecycle
+of §7.4 with a different entry point and a batch wrapper.** Same
+`contrib.proposed` / `cosign` / `contrib.accepted` events, same brain write.
+That is what makes building both affordable.
 
-Harvest is the correct product answer to review fatigue — continuous
-"is this worth teaching?" is too much cognitive load for a working session.
-Build A for the demo, present B as the immediate roadmap line.
+### 7.5.1 Harvest runs mid-session too, not only at close
 
-**Do not build:** per-message auto-suggestion ("should this be saved?"). That is
-nudge fatigue on every turn and it drags the design back toward
-approve-everything. Auto-*extraction* once at close (mode B) is a different
-interaction and is fine.
+Triggered by any T2+ via `openHarvest`, at any point. Also auto-offered by
+`closeSession()`. Mid-session harvest covers "we've been talking for 20 minutes,
+let's bank what we learned" without stopping the flow each time.
+
+### 7.5.2 Flow
+
+1. `harvest.opened {harvestId, sinceSeq, candidateCount}` — `sinceSeq` is the
+   last harvested sequence number, so harvests never re-offer the same material.
+2. **Candidate extraction** — one draft-lane call over the archive slice since
+   `sinceSeq`, returning `{text, sourceEventId, seat}[]`. Candidates are held in
+   harvest state, **not** emitted as events until kept.
+3. Crew keeps / edits / drops. Each kept candidate → `contrib.proposed
+   {source:"harvest", harvestId, fromEventId}`.
+4. **Batch co-sign** — 2 T3s co-sign the whole batch; each item emits its own
+   `contrib.accepted` so the cap-table fold is unchanged.
+5. **One** `writeBrain` call for all accepted chunks → one rootHash → one
+   `brain.updated`.
+6. `harvest.closed {harvestId, kept, dropped, lastSeq}`.
+
+### 7.5.3 Extraction reads human text only
+
+Candidates are extracted **only from `instruct` events** — never from agent
+answers. Preserves the §7.2 invariant that a contribution is human authorship,
+and sidesteps the unanswerable question of which seat gets credit for something
+the model wrote. Kept candidates remain editable before proposal.
+
+### 7.5.4 Selfie continuity on a batch
+
+B2.5 says re-verify on each accepted contribution. For a batch: **one continuity
+ping per signing T3 per batch**, logged once with the list of `contribId`s it
+covers. The property that matters — a human was demonstrably present at the
+moment of acceptance — is preserved; the batch is a single moment of acceptance.
+Touches M3, so flag it to whoever owns the World lane.
+
+### 7.5.5 Ordering constraint (real, easy to get wrong)
+
+The cap table is derived at `closeSession()`. A harvest that is still open holds
+un-accepted contributions that would change it.
+
+**`closeSession()` MUST reject while any harvest is open.** Close or cancel the
+harvest first. Enforce in `reduce`, not in the UI.
+
+### 7.5.6 Scope guard
+
+If extraction is flaky or the inference lane is down, fall back to **manual
+harvest**: list every `instruct` event since `sinceSeq`, crew picks by hand. Zero
+AI involved, and every other part of the flow is unchanged. Ship the fallback
+first; extraction is an enhancement on top, not a dependency.
+
+**Still do not build:** per-message auto-suggestion ("should this be saved?").
+Nudge fatigue on every turn, and it drags the design back toward
+approve-everything. Batched extraction is a different interaction and is fine.
 
 ---
 
@@ -420,13 +471,19 @@ type RunStartedPayload   = { runId: string; lane: Lane; instructId: string };
 type RunCompletedPayload = { runId: string; lane: Lane; text: string;
                              attestationRef?: string };
 type ContribProposedPayload = { contribId: string; text: string;
-                                source: ContribSource; fromRunId?: string };
+                                source: ContribSource; fromRunId?: string;
+                                harvestId?: string; fromEventId?: string };
 
 // new event types
 | "archive.written"   // {storageRootHash, eventCount}
-| "harvest.opened"    // mode B only — spec-only this weekend
-| "harvest.closed"    // {kept: string[], dropped: number}
+| "harvest.opened"    // {harvestId, sinceSeq, candidateCount}
+| "harvest.closed"    // {harvestId, kept: string[], dropped: number, lastSeq}
+| "harvest.cancelled" // {harvestId}
 ```
+
+`verify.continuity.ok` gains an optional `covers: string[]` (contribIds) for the
+batch case — see §7.5.4. Empty/absent means it covers a single acceptance, so
+existing live-acceptance behaviour is unchanged.
 
 ## 9.1 Optional rename — decide before M0, not after
 
@@ -456,6 +513,10 @@ Default if undecided at M0: keep frozen names.
 | Last T3 leaves mid-contribution | per master M0: complete-then-lock; `perm.recomputed` emitted |
 | Two T3s co-sign simultaneously | server is single-writer; second cosign folds onto the first, idempotent by `contribId` + seat |
 | Event log diverges between tabs | impossible by construction — if observed, `apply()` is impure. Check §4.2. |
+| Candidate extraction fails or is slow | fall back to manual harvest (§7.5.6); the rest of the flow is identical |
+| `closeSession()` while a harvest is open | rejected in `reduce` (§7.5.5) — close or cancel the harvest first |
+| Second harvest opened while one is open | rejected; one open harvest per session |
+| Harvest abandoned (crew loses interest) | `harvest.cancelled`; `sinceSeq` not advanced, so nothing is lost to a later harvest |
 
 ---
 
@@ -471,13 +532,24 @@ Default if undecided at M0: keep frozen names.
    real root hash.
 7. Canonical lane: inject brain chunks + citation prompt → agent cites teachers.
 8. `zg/archive.ts`: write full event log on `session.closed` → `archive.written`.
+9. **Harvest, manual first** (§7.5.6): `openHarvest` → list `instruct` events
+   since `sinceSeq` → keep/edit/drop → `cosignBatch` → N × `contrib.accepted` →
+   one `writeBrain`. Enforce the §7.5.5 close-ordering rule in `reduce`.
+10. **Harvest extraction** (§7.5.2 step 2): swap the raw `instruct` list for a
+    draft-lane extraction pass. Pure enhancement — step 9 must already work
+    without it.
+
+Steps 9–10 are the last in, first out under time pressure: cut 10 before 9, and
+9 before anything earlier. Live acceptance (step 4) is never cut.
 
 **DoD:** two browsers, one agent; draft streams to both; a contribution
 co-signed by two seats lands in the brain on 0G Storage; a canonical answer
 cites it by contributor and number; a third tab joining mid-session folds the
-log and matches the other two exactly.
+log and matches the other two exactly; a mid-session harvest banks 3 candidates
+in one batch co-sign and one brain write, and `closeSession()` refuses while
+that harvest is open.
 
 ---
 
-*v1.0. Subordinate to MASS-specs.md v0.6. Author decisions in §9.1 and §7.5
-must be resolved before M0 starts.*
+*v1.1. Subordinate to MASS-specs.md v0.6. Both review modes (§7.5) are in scope.
+One open decision remains: the §9.1 event rename — resolve before M0 starts.*

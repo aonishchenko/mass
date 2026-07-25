@@ -72,6 +72,10 @@
 ## MP2.5 (~20:30) — B-list decision, apply spec B4 cut order without debate
 - [ ] B2.1 First Job wired (receiveJobPayment + payoutSplit) — T
 - [ ] B2.3 sybil badge in UI — N
+- [ ] B2.7 batch harvest, MANUAL (shared-session-spec §7.5.6): openHarvest → list instruct events → keep/edit/drop → cosignBatch → one writeBrain — P
+- [ ] B2.7 enforce close-ordering: `closeSession()` rejects while a harvest is open (§7.5.5) — T
+- [ ] B2.7 continuity ping on batch acceptance, one per signing T3 (§7.5.4) — N
+- [ ] B2.8 harvest candidate extraction via draft lane (§7.5.2) — T (only after manual harvest is green)
 - [ ] B2.6 challenge state UI beat — N (only if calm)
 - [ ] GO/NO-GO **B3.1 Identity Check** (rule: B1 done + B2.1–3 green). If GO → N builds regulated-session toggle + necessity note (MODERATE EXTRA TIME ~2h)
 - [ ] GO/NO-GO **B3.2 ERC-8004 + ENSIP-25** (only if genuinely ahead — SIGNIFICANTLY MORE TIME 3–5h) → T registry + N verification loop

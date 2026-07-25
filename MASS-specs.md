@@ -82,6 +82,8 @@ THE FIRST JOB (outsider pays; split hits crew wallets live).
 | 4 | Agent public CV page (ENS-resolved employee record) | M1/M5 | ~2h |
 | 5 | Selfie continuity ping on each acceptance | M3 | ~1h |
 | 6 | Challenge state in contribution lifecycle (propose→challenge→accept) | M0/M1 | ~1-2h |
+| 7 | Batch harvest review, manual (shared-session-spec §7.5) — mid-session + at close | M0/M1 | ~2h |
+| 8 | Harvest candidate extraction via draft lane (§7.5.2) — enhancement on 7 | M2 | ~1h |
 
 ## B3. NICE TO HAVE BUT TAKES SOME TIME (start ONLY if B1 done and B2 items 1-3 green by Sat evening; half-finished = worse than none)
 | # | Feature | Module | Cost | Why it still tempts us |
@@ -90,7 +92,8 @@ THE FIRST JOB (outsider pays; split hits crew wallets live).
 | 2 | ERC-8004 registration + ENSIP-25 verification loop | M4+M5 | 3-5h — SIGNIFICANTLY INCREASES DEV TIME (new integration surface: registry contract + verification flow) | One integration, extra points at BOTH Hedera and ENS; explicitly flagged "new and interesting" by ENS |
 
 ## B4. Cut order under pressure (apply without discussion)
-B3.2 → B3.1 → B2.6 → B2.5 → B2.4 → B2.3 → B2.2 → B2.1 (fight for B2.1/B2.2).
+B2.8 → B3.2 → B3.1 → B2.7 → B2.6 → B2.5 → B2.4 → B2.3 → B2.2 → B2.1
+(fight for B2.1/B2.2). B2.8 goes first because B2.7 works without it.
 NEVER cut anything in B1. NEVER cut: honest inference path, Selfie gate +
 server verification, HCS log, contribution-weighted mint, >=1 Hedera payment,
 live ENS resolution, deployed URL.
@@ -227,6 +230,8 @@ Router-vs-direct-broker migration. DoD: that file §11.
 Selfie on seat claim → SERVER-SIDE VERIFY (hard gate) → sybil score into
 event + badge. AgentKit T3 delegation (booth: native multi-principal or
 server-side aggregation). Continuity ping on acceptance (B2.5).
+Continuity on a BATCH acceptance (harvest, B2.7): one ping per signing T3 per
+batch, logged with the contribIds it covers — shared-session-spec §7.5.4.
 B3.1 stretch: one COMMIT action flips to "regulated" requiring
 verifyIdentity(over18) + write the one-page necessity/minimization note.
 EVERY friction → world-testing-template.md AS IT HAPPENS (dated).
@@ -296,6 +301,7 @@ Honesty banner copy: "Unsealed mode — running on <provider>; no attestation
 available for this response."
 Open decisions in shared-session-spec (resolve before M0):
 [§9.1 event rename draft.*/canonical.* → run.*: ____ (default: keep frozen names)]
-[§7.5 review mode: BUILD live acceptance only; batch harvest = roadmap line]
+Resolved: §7.5 — BOTH review modes are built (live acceptance + batch harvest,
+mid-session and at close). Harvest = B2.7/B2.8, cut order in B4.
 
 *v0.6 supersedes all prior versions. N = Niek, T = teammate.*
