@@ -132,6 +132,8 @@ export async function verifyWorldProof(
   env: WorldEnv,
   kind: VerifyKind,
   proof: WorldProof | null | undefined
+,
+  envOverride?: string
 ): Promise<VerifyOutcome> {
   const verifiedAt = Date.now();
   const fail = (error: string, raw: unknown = null): VerifyOutcome => ({
@@ -147,23 +149,30 @@ export async function verifyWorldProof(
 
   if (!proof) return fail("missing proof");
 
-  // DEV FALLBACK: only when there is no real app AND it is explicitly enabled.
-  // Lets the crew rehearse the full arc (and CI exercise the logic) without
-  // World credentials. Structurally impossible once the portal is wired.
+  // DEV BYPASS: requires the server secret WORLD_DEV_FALLBACK=1 AND an
+  // explicitly dev-marked proof. A client can never grant itself this — the
+  // secret is the gate.
+  //
+  // Checked BEFORE worldConfigured on purpose. It used to sit inside the
+  // "no app configured" branch, which made the bypass unreachable the moment
+  // the portal was wired — exactly when a broken World path most needs a way
+  // to keep rehearsing. Every such result is marked dev:true and the UI shows
+  // the amber banner. MUST be unset for judging.
+  if (env.WORLD_DEV_FALLBACK === "1" && proof.dev === true) {
+    const cred = proof.responses?.[0]?.identifier ?? (kind === "agentkit" ? "orb" : "selfie");
+    const nullifier = proof.responses?.[0]?.nullifier ?? `dev_${kind}_${cred}`;
+    return {
+      ok: true,
+      nullifierHash: nullifier,
+      credential: cred,
+      sybilScore: deriveSybilScore(cred),
+      verifiedAt,
+      dev: true,
+      raw: { dev: true, note: "DEV BYPASS — proof NOT verified against World" },
+    };
+  }
+
   if (!worldConfigured(env)) {
-    if (env.WORLD_DEV_FALLBACK === "1" && proof.dev === true) {
-      const cred = proof.responses?.[0]?.identifier ?? (kind === "agentkit" ? "orb" : "selfie");
-      const nullifier = proof.responses?.[0]?.nullifier ?? `dev_${kind}_${cred}`;
-      return {
-        ok: true,
-        nullifierHash: nullifier,
-        credential: cred,
-        sybilScore: deriveSybilScore(cred),
-        verifiedAt,
-        dev: true,
-        raw: { dev: true, note: "DEV FALLBACK — proof NOT verified against World" },
-      };
-    }
     return fail("World not configured (set WORLD_APP_ID and WORLD_RP_ID)");
   }
 
@@ -182,7 +191,7 @@ export async function verifyWorldProof(
     protocol_version: proof.protocol_version ?? "3.0",
     nonce: proof.nonce,
     action,
-    environment: env.WORLD_ENV ?? proof.environment ?? "production",
+    environment: envOverride ?? proof.environment ?? env.WORLD_ENV ?? "production",
     responses,
   };
 
@@ -220,7 +229,11 @@ export async function verifyWorldProof(
     dev: false,
     error: success
       ? undefined
-      : String(json.detail ?? json.code ?? `verification failed (HTTP ${status})`),
+      : String(
+          json.detail ??
+            json.code ??
+            `World rejected the proof (HTTP ${status}) for environment "${body.environment}", action "${action}". An empty 403 usually means the action does not exist in the Developer Portal, or the app is not approved for this credential.`
+        ),
     raw: sanitizeRaw(json, status),
   };
 }

@@ -17,11 +17,54 @@ import {
 import { perms, type Intent, type SessionView } from "./session";
 import { EnsPanel } from "./Ens";
 
-type VerifyFn = (kind: "selfie" | "agentkit") => Promise<{
-  token: string;
-  sybilScore?: number;
-  dev: boolean;
-}>;
+type VerifyOptions = {
+  environment?: "production" | "staging";
+  preset?: "orb" | "selfie";
+  dev?: boolean;
+};
+
+type VerifyFn = (
+  kind: "selfie" | "agentkit",
+  opts?: VerifyOptions
+) => Promise<{ token: string; sybilScore?: number; dev: boolean }>;
+
+/**
+ * World has several ways in and they fail differently: Selfie Check is
+ * partner-gated, the simulator only accepts staging, and the real World App
+ * only does production. Offering them as buttons turns a redeploy-per-guess
+ * loop into clicking, which matters when the error is a bare 403.
+ */
+const SIGN_IN_OPTIONS: {
+  id: string;
+  label: string;
+  hint: string;
+  opts: VerifyOptions;
+}[] = [
+  {
+    id: "selfie-prod",
+    label: "Selfie Check",
+    hint: "real World App · production",
+    opts: { environment: "production", preset: "selfie" },
+  },
+  {
+    id: "orb-prod",
+    label: "Orb",
+    hint: "real World App · production",
+    opts: { environment: "production", preset: "orb" },
+  },
+  {
+    id: "selfie-staging",
+    label: "Selfie Check",
+    hint: "simulator · staging",
+    opts: { environment: "staging", preset: "selfie" },
+  },
+  {
+    id: "orb-staging",
+    label: "Orb",
+    hint: "simulator · staging",
+    opts: { environment: "staging", preset: "orb" },
+  },
+];
 
 /** Tier → label + distinct badge styling, so authority is legible at a glance. */
 const TIER: Record<string, { label: string; cls: string }> = {
@@ -67,7 +110,7 @@ export const Rail: FC<{
 
   // Seat claim requires a SERVER-verified Selfie Check; the token is issued only
   // after /api/verify/selfie succeeds. See web/src/world.tsx.
-  const claim = async () => {
+  const claim = async (opts: VerifyOptions = {}) => {
     // `verifying` only covers the World round-trip; the seat does not exist
     // until the server emits seat.claimed. Without act.start() the button
     // re-enabled in between, and five clicks made five seats.
@@ -75,10 +118,10 @@ export const Rail: FC<{
     setAuthError(null);
     act.start("claim");
     try {
-      const r = await verify("selfie");
+      const r = await verify("selfie", opts);
       send({ kind: "claimSeat", name: name.trim(), selfieToken: r.token });
     } catch (e) {
-      setAuthError(e instanceof Error ? e.message : "Selfie Check failed");
+      setAuthError(e instanceof Error ? e.message : "Verification failed");
     }
   };
 
@@ -138,27 +181,50 @@ export const Rail: FC<{
           <label className="text-[11px] tracking-wide text-[var(--color-faint)] uppercase">
             Claim your seat
           </label>
-          <div className="flex gap-2 pt-2">
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && claim()}
-              placeholder="your name"
-              disabled={verifying}
-              className="min-w-0 flex-1 rounded-md border border-[#1a1a18]/15 bg-white/70 px-2 py-1.5 outline-none disabled:opacity-50"
-            />
-            <button
-              onClick={claim}
-              disabled={!name.trim() || verifying || !!act.pending}
-              className="rounded-md bg-[var(--color-ink)] px-3 py-1.5 text-[var(--color-cream)] hover:opacity-85 disabled:opacity-40"
-            >
-              {verifying ? "Verifying…" : act.isPending("claim") ? "Joining…" : "Verify & join"}
-            </button>
-          </div>
-          <p className="pt-1.5 text-[11px] leading-snug text-[var(--color-muted)]">
-            A World <strong>Selfie Check</strong> proves you’re a unique human before
-            you can build — it’s what makes each ownership share sybil-proof.
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && claim(SIGN_IN_OPTIONS[0].opts)}
+            placeholder="your name"
+            disabled={verifying}
+            className="mt-2 w-full rounded-md border border-[#1a1a18]/15 bg-white/70 px-2 py-1.5 outline-none disabled:opacity-50"
+          />
+
+          <p className="pt-2 text-[11px] leading-snug text-[var(--color-muted)]">
+            A World check proves you’re a unique human — that is what makes each
+            ownership share sybil-proof. Pick the method that works for you:
           </p>
+
+          <div className="grid grid-cols-2 gap-1.5 pt-2">
+            {SIGN_IN_OPTIONS.map((o) => (
+              <button
+                key={o.id}
+                onClick={() => claim(o.opts)}
+                disabled={!name.trim() || verifying || !!act.pending}
+                title={o.hint}
+                className="rounded-md border border-[#1a1a18]/20 px-2 py-1.5 text-left hover:bg-white/60 disabled:opacity-40"
+              >
+                <span className="block text-[12px] font-medium">{o.label}</span>
+                <span className="block text-[10px] text-[var(--color-muted)]">{o.hint}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* Kept deliberately last and visually separate: it verifies NOTHING
+              and exists so a broken World path can never block a rehearsal. */}
+          <button
+            onClick={() => claim({ dev: true })}
+            disabled={!name.trim() || verifying || !!act.pending}
+            className="mt-1.5 w-full rounded-md border border-dashed border-amber-600/50 py-1.5 text-[11.5px] text-amber-800 hover:bg-amber-500/10 disabled:opacity-40"
+          >
+            Dev bypass — skip World (unverified)
+          </button>
+
+          {(verifying || act.isPending("claim")) && (
+            <p className="pt-1.5 text-[11px] text-[var(--color-muted)]">
+              {verifying ? "Waiting for World…" : "Joining…"}
+            </p>
+          )}
           {authError && <p className="pt-1 text-[11px] text-red-700">{authError}</p>}
         </div>
       )}

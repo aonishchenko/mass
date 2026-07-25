@@ -167,7 +167,12 @@ export class SessionRoom extends DurableObject<Env> {
     // before any seat is granted.
     if (url.pathname.endsWith("/verify/context")) {
       const kind: VerifyKind = url.searchParams.get("kind") === "agentkit" ? "agentkit" : "selfie";
-      return Response.json(buildContext(this.env, kind));
+      return Response.json(
+        buildContext(this.env, kind, {
+          environment: url.searchParams.get("env") ?? undefined,
+          preset: url.searchParams.get("preset") ?? undefined,
+        })
+      );
     }
     if (url.pathname.endsWith("/verify/selfie")) return this.handleVerify(request, "selfie");
     if (url.pathname.endsWith("/verify/agentkit")) return this.handleVerify(request, "agentkit");
@@ -477,14 +482,18 @@ export class SessionRoom extends DurableObject<Env> {
    */
   private async handleVerify(request: Request, kind: VerifyKind): Promise<Response> {
     let proof: unknown = null;
+    // The UI can try a different environment per attempt, so a mismatch can be
+    // diagnosed without a redeploy.
+    let envOverride: string | undefined;
     try {
-      const body = (await request.json()) as { proof?: unknown };
+      const body = (await request.json()) as { proof?: unknown; env?: string };
       proof = body?.proof ?? null;
+      envOverride = body?.env;
     } catch {
       /* proof stays null → verification fails cleanly */
     }
 
-    const outcome = await verifyWorldProof(this.env, kind, proof as never);
+    const outcome = await verifyWorldProof(this.env, kind, proof as never, envOverride);
 
     this.ctx.storage.sql.exec(
       "INSERT INTO verify_log (ts, kind, ok, dev, detail) VALUES (?, ?, ?, ?, ?)",
