@@ -43,6 +43,8 @@ export interface Env {
   ZG_STORAGE_INDEXER: string;
   ZG_PRIVATE_KEY?: string;
   SESSION_KEY?: string;
+  ZG_STORAGE_SERVICE_URL?: string;
+  STORAGE_AUTH_TOKEN?: string;
 }
 
 interface SocketMeta {

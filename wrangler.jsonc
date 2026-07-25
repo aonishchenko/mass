@@ -2,6 +2,9 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "mass",
   "main": "src/index.ts",
+  // Pinned so a multi-account login cannot deploy to the wrong place.
+  "account_id": "3550b1d16b78241182c4cb602b695110",
+  "workers_dev": true,
   "compatibility_date": "2025-07-01",
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },

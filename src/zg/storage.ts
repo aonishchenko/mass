@@ -18,6 +18,14 @@ export interface StorageEnv {
   ZG_STORAGE_INDEXER: string;
   ZG_PRIVATE_KEY?: string;
   SESSION_KEY?: string;
+  /**
+   * Sidecar base URL (services/zg-storage). REQUIRED in production: 0G storage
+   * nodes listen on http://<ip>:5678 and Cloudflare Workers cannot open
+   * outbound connections on port 5678. Unset falls back to the in-Worker SDK
+   * path, which only works under Miniflare locally.
+   */
+  ZG_STORAGE_SERVICE_URL?: string;
+  STORAGE_AUTH_TOKEN?: string;
 }
 
 export class StorageUnconfigured extends Error {
@@ -28,7 +36,24 @@ export class StorageUnconfigured extends Error {
 }
 
 async function upload(env: StorageEnv, bytes: Uint8Array): Promise<string> {
-  if (!env.ZG_PRIVATE_KEY || !env.SESSION_KEY) throw new StorageUnconfigured();
+  if (!env.SESSION_KEY) throw new StorageUnconfigured();
+
+  if (env.ZG_STORAGE_SERVICE_URL) {
+    const res = await fetch(`${env.ZG_STORAGE_SERVICE_URL.replace(/\/$/, "")}/upload`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/octet-stream",
+        authorization: `Bearer ${env.STORAGE_AUTH_TOKEN ?? ""}`,
+      },
+      body: bytes,
+    });
+    if (!res.ok) throw new Error(`storage sidecar ${res.status}: ${(await res.text()).slice(0, 200)}`);
+    const { rootHash } = await res.json<{ rootHash: string }>();
+    if (!rootHash) throw new Error("sidecar returned no rootHash");
+    return rootHash;
+  }
+
+  if (!env.ZG_PRIVATE_KEY) throw new StorageUnconfigured();
 
   // MUST run before the SDK is imported: its axios 0.27 picks an adapter at
   // import time and neither choice exists in Workers. See axios-fetch-adapter.ts.
@@ -76,6 +101,15 @@ export async function writeArchive(env: StorageEnv, events: MassEvent[]): Promis
  * Encrypted blobs need downloadToBlob(), NOT download() — see §8.2.
  */
 export async function readBlob(env: StorageEnv, rootHash: string): Promise<Uint8Array> {
+  if (env.ZG_STORAGE_SERVICE_URL) {
+    const base = env.ZG_STORAGE_SERVICE_URL.replace(/\/$/, "");
+    const res = await fetch(`${base}/download?root=${encodeURIComponent(rootHash)}`, {
+      headers: { authorization: `Bearer ${env.STORAGE_AUTH_TOKEN ?? ""}` },
+    });
+    if (!res.ok) throw new Error(`storage sidecar ${res.status}`);
+    return new Uint8Array(await res.arrayBuffer());
+  }
+
   await installFetchAdapter();
   const { Indexer } = await import("@0gfoundation/0g-storage-ts-sdk");
   const indexer = new Indexer(env.ZG_STORAGE_INDEXER);
