@@ -38,6 +38,7 @@ export interface WorldEnv {
    */
   WORLD_DEV_FALLBACK?: string;
   WORLD_SELFIE_PRESET?: string;
+  WORLD_SIGNER_CREDENTIAL?: string;
   /** HMAC secret for session tokens (already used for 0G first-party crypto). */
   SESSION_KEY?: string;
 }

@@ -118,6 +118,7 @@ export function useWorldVerify(sessionId: string) {
               environment?: "production" | "staging" | "sandbox";
               rp_context: RpContext;
               selfiePreset?: "orb" | "selfie";
+              preset?: "orb" | "selfie";
             }
           | { configured: false; dev?: boolean; error?: string };
 
@@ -164,8 +165,10 @@ export function useWorldVerify(sessionId: string) {
              * stays testable — still a real, server-verified proof, just a
              * different credential. Defaults to Selfie Check.
              */
+            // The server decides which credential proves each tier, so an
+            // Orb-less venue is a config change rather than a code change.
             preset:
-              kind === "agentkit" || ctx.selfiePreset === "orb"
+              (ctx.preset ?? (kind === "agentkit" ? "orb" : ctx.selfiePreset)) === "orb"
                 ? orbLegacy()
                 : selfieCheckLegacy(),
           });
@@ -197,6 +200,21 @@ export function useWorldVerify(sessionId: string) {
     [sessionId]
   );
 
+  /**
+   * Dismissing the widget without finishing must settle the promise. It used to
+   * leave `pending` set and `busy` true, so closing the QR disabled every
+   * button until a reload — the failure mode looked like the app had hung.
+   */
+  const handleOpenChange = useCallback((next: boolean) => {
+    setOpen(next);
+    if (next) return;
+    const cur = pending.current;
+    if (!cur) return;
+    pending.current = null;
+    setBusy(false);
+    cur.reject(new Error("Verification cancelled — you can try again."));
+  }, []);
+
   const onError = useCallback((err?: unknown) => {
     const cur = pending.current;
     pending.current = null;
@@ -208,7 +226,7 @@ export function useWorldVerify(sessionId: string) {
   const widget = cfg ? (
     <IDKitRequestWidget
       open={open}
-      onOpenChange={setOpen}
+      onOpenChange={handleOpenChange}
       app_id={cfg.app_id}
       action={cfg.action}
       rp_context={cfg.rp_context}

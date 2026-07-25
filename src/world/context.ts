@@ -30,6 +30,8 @@ export type ContextResponse =
       rp_context: RpContext;
       /** Builder-tier credential override — see WORLD_SELFIE_PRESET. */
       selfiePreset: "orb" | "selfie";
+      /** Credential to request for THIS kind. */
+      preset: "orb" | "selfie";
     }
   | { configured: false; dev: true }
   | { configured: false; dev: false; error: string };
@@ -64,8 +66,26 @@ export function buildContext(
 
   // WORLD_SELFIE_PRESET=orb makes the Builder tier use Orb instead of the
   // partner-gated Selfie Check — needed when only the simulator is available.
-  const selfiePreset =
-    (overrides.preset ?? env.WORLD_SELFIE_PRESET) === "orb" ? "orb" : "selfie";
+  /**
+   * Which credential proves each tier.
+   *
+   * The token's KIND comes from the endpoint that issued it, not from the
+   * credential behind it — so the Signer step can be proven with a Selfie Check
+   * and still be a distinct verification against the mass-agentkit action.
+   * That matters at a venue with no Orb: WORLD_SIGNER_CREDENTIAL=selfie keeps
+   * the Observer -> Builder -> Signer ladder and the two-distinct-humans
+   * co-sign rule intact, without Orb hardware.
+   */
+  const defaultPreset =
+    kind === "agentkit"
+      ? env.WORLD_SIGNER_CREDENTIAL === "selfie"
+        ? "selfie"
+        : "orb"
+      : env.WORLD_SELFIE_PRESET === "orb"
+        ? "orb"
+        : "selfie";
+  const preset = (overrides.preset as "orb" | "selfie" | undefined) ?? defaultPreset;
+  const selfiePreset = preset;
 
   const action = actionFor(env, kind);
   const sig = signRequest({ signingKeyHex: env.WORLD_RP_PRIVATE_KEY, action });
@@ -73,6 +93,7 @@ export function buildContext(
   return {
     configured: true,
     selfiePreset,
+    preset,
     app_id: env.WORLD_APP_ID!,
     action,
     environment: overrides.environment ?? env.WORLD_ENV ?? "production",

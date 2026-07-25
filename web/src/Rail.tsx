@@ -34,37 +34,6 @@ type VerifyFn = (
  * only does production. Offering them as buttons turns a redeploy-per-guess
  * loop into clicking, which matters when the error is a bare 403.
  */
-const SIGN_IN_OPTIONS: {
-  id: string;
-  label: string;
-  hint: string;
-  opts: VerifyOptions;
-}[] = [
-  {
-    id: "selfie-prod",
-    label: "Selfie Check",
-    hint: "real World App · production",
-    opts: { environment: "production", preset: "selfie" },
-  },
-  {
-    id: "orb-prod",
-    label: "Orb",
-    hint: "real World App · production",
-    opts: { environment: "production", preset: "orb" },
-  },
-  {
-    id: "selfie-staging",
-    label: "Selfie Check",
-    hint: "simulator · staging",
-    opts: { environment: "staging", preset: "selfie" },
-  },
-  {
-    id: "orb-staging",
-    label: "Orb",
-    hint: "simulator · staging",
-    opts: { environment: "staging", preset: "orb" },
-  },
-];
 
 /** Tier → label + distinct badge styling, so authority is legible at a glance. */
 const TIER: Record<string, { label: string; cls: string }> = {
@@ -256,7 +225,7 @@ export const Rail: FC<{
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && claim(SIGN_IN_OPTIONS[0].opts)}
+            onKeyDown={(e) => e.key === "Enter" && claim()}
             placeholder="your name"
             disabled={verifying}
             className="mt-2 w-full rounded-md border border-[#1a1a18]/15 bg-white/70 px-2 py-1.5 outline-none disabled:opacity-50"
@@ -267,20 +236,13 @@ export const Rail: FC<{
             ownership share sybil-proof. Pick the method that works for you:
           </p>
 
-          <div className="grid grid-cols-2 gap-1.5 pt-2">
-            {SIGN_IN_OPTIONS.map((o) => (
-              <button
-                key={o.id}
-                onClick={() => claim(o.opts)}
-                disabled={!name.trim() || verifying || !!act.pending}
-                title={o.hint}
-                className="rounded-md border border-[#1a1a18]/20 px-2 py-1.5 text-left hover:bg-white/60 disabled:opacity-40"
-              >
-                <span className="block text-[12px] font-medium">{o.label}</span>
-                <span className="block text-[10px] text-[var(--color-muted)]">{o.hint}</span>
-              </button>
-            ))}
-          </div>
+          <button
+            onClick={() => claim()}
+            disabled={!name.trim() || verifying || !!act.pending}
+            className="mt-2 w-full rounded-md bg-[var(--color-ink)] py-2 text-[var(--color-cream)] hover:opacity-85 disabled:opacity-40"
+          >
+            {verifying ? "Waiting for World…" : act.isPending("claim") ? "Joining…" : "Verify with World"}
+          </button>
 
           {/* Kept deliberately last and visually separate: it verifies NOTHING
               and exists so a broken World path can never block a rehearsal. */}
@@ -289,7 +251,7 @@ export const Rail: FC<{
             disabled={!name.trim() || verifying || !!act.pending}
             className="mt-1.5 w-full rounded-md border border-dashed border-amber-600/50 py-1.5 text-[11.5px] text-amber-800 hover:bg-amber-500/10 disabled:opacity-40"
           >
-            Dev bypass — skip World (unverified)
+            Dev fallback — skip World
           </button>
 
           {(verifying || act.isPending("claim")) && (
@@ -365,29 +327,19 @@ export const Rail: FC<{
         {me?.tier === "T2" && (
           <>
             <button
-              onClick={() => delegate({ environment: "production" })}
+              onClick={() => delegate()}
               disabled={verifying || delegating}
               className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-md border border-emerald-700/30 bg-emerald-600/10 py-1.5 text-[12px] text-emerald-900 hover:bg-emerald-600/15 disabled:opacity-40"
             >
               <ShieldCheckIcon size={13} />
-              {delegating ? "Verifying with Orb…" : "Become a Signer (Orb)"}
+              {delegating ? "Waiting for World…" : "Become a Signer"}
             </button>
-            <button
-              onClick={() => delegate({ environment: "staging" })}
-              disabled={verifying || delegating}
-              className="mt-1 w-full rounded-md border border-[#1a1a18]/20 py-1 text-[11px] hover:bg-white/60 disabled:opacity-40"
-            >
-              Orb · simulator (staging)
-            </button>
-            {/* Seat claim had a dev route but delegation did not, so a dev-mode
-                crew could reach Builder and then stall — and co-signing needs
-                two Signers. Both tiers need the same escape hatch. */}
             <button
               onClick={() => delegate({ dev: true })}
               disabled={verifying || delegating}
               className="mt-1 w-full rounded-md border border-dashed border-amber-600/50 py-1 text-[11px] text-amber-800 hover:bg-amber-500/10 disabled:opacity-40"
             >
-              Dev bypass — become Signer (unverified)
+              Dev fallback — skip World
             </button>
           </>
         )}
