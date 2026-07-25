@@ -62,10 +62,14 @@ The agent's name carries records that say **where the agent lives**:
 agent-context         "Doc — a documentation reviewer. Taught 4 things by
                        3 verified humans. Owned by niek… 60%, oleksiy… 40%.
                        Cites its teachers. Paid in HBAR."
-agent-endpoint[web]   https://…/cv/doc.mass-lisbon.eth
-agent-endpoint[a2a]   https://…/api/agent/doc.mass-lisbon.eth
-agent-endpoint[mcp]   https://…/api/agent/doc.mass-lisbon.eth/mcp
+agent-endpoint[web]   https://…/cv/doc.mass-lisbon.eth?session=…
+agent-endpoint[a2a]   https://…/api/agent/doc.mass-lisbon.eth?session=…
 ```
+
+Only endpoints that actually answer are published. An MCP endpoint was listed
+here before an MCP server existed; a record pointing at a 404 is the same kind
+of unbacked claim as a proof we issued ourselves. Add the record when the
+server exists, not before.
 
 This follows **ENSIP-26**, the ENS standard for finding AI agents. Anyone who
 wants to hire our agent does this:

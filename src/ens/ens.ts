@@ -263,9 +263,13 @@ export function agentTextRecords(
     // Deliberately the whole story in one string: what it is, who owns it, and
     // what it is paid in. A client reads this before choosing a protocol.
     "agent-context": agentContext(profile),
-    "agent-endpoint[web]": `${origin}/cv/${profile.name}`,
-    "agent-endpoint[a2a]": `${origin}/api/agent/${profile.name}`,
-    "agent-endpoint[mcp]": `${origin}/api/agent/${profile.name}/mcp`,
+    // Only endpoints that actually answer. An MCP endpoint was advertised here
+    // before one existed: a record pointing at a 404 is the same class of claim
+    // as a self-issued attestation, and this record set is the one thing a
+    // stranger is asked to trust. Both of these carry the session, because the
+    // agent lives in one room and a name alone cannot say which.
+    "agent-endpoint[web]": `${origin}/cv/${profile.name}?session=${encodeURIComponent(profile.session)}`,
+    "agent-endpoint[a2a]": `${origin}/api/agent/${profile.name}?session=${encodeURIComponent(profile.session)}`,
 
     // --- ENSIP-25: the bidirectional link to the ERC-8004 registry entry ----
     // Only written once a registration genuinely exists. The value is "1";
@@ -295,7 +299,10 @@ export function agentContext(profile: AgentProfile): string {
   const taught = ` Taught ${profile.contributionCount} thing${
     profile.contributionCount === 1 ? "" : "s"
   } by ${profile.crewSize} verified human${profile.crewSize === 1 ? "" : "s"}.`;
-  return `${profile.description}${taught}${owners} Cites its teachers. Paid in HBAR on Hedera testnet.`;
+  // The description may already end with the citation promise (the generic one
+  // does), and reading it twice in the first thing a client sees is sloppy.
+  const cites = /cites its teachers/i.test(profile.description) ? "" : " Cites its teachers.";
+  return `${profile.description}${taught}${owners}${cites} Paid in HBAR on Hedera testnet.`;
 }
 
 // ---------------------------------------------------------------------------
@@ -420,7 +427,7 @@ export function agentCard(session: Session, env: EnsEnv, origin: string) {
     schema_version: "1",
     name: profile.name ?? "unregistered agent",
     description: profile.description,
-    url: `${origin}/api/agent/${profile.name ?? ""}/mcp`,
+    url: `${origin}/api/agent/${profile.name ?? ""}?session=${encodeURIComponent(session.sessionId)}`,
     provider: { name: "MASS", url: origin },
     version: "0.1.0",
     capabilities: { streaming: true, citations: true },

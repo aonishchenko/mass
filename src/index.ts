@@ -104,16 +104,34 @@ export default {
     // /api/ens/* is the M5 identity layer.
     const isVerify = url.pathname.startsWith("/api/verify/");
     const isEns = url.pathname.startsWith("/api/ens/");
-    if (url.pathname === "/ws" || url.pathname === "/api/state" || isVerify || isEns) {
+    // ENSIP-26/27 discovery. These are the endpoints the agent's own ENS
+    // records point at, so they have to be reachable: a record naming a route
+    // that 404s is a claim we cannot back, and the whole "resolve the name to
+    // reach the agent" story rests on them answering.
+    const isAgent =
+      url.pathname === "/.well-known/agent.json" || url.pathname.startsWith("/api/agent/");
+    if (
+      url.pathname === "/ws" ||
+      url.pathname === "/api/state" ||
+      isVerify ||
+      isEns ||
+      isAgent
+    ) {
       const search = url.searchParams;
       if (!search.get("session")) search.set("session", "default");
       const sessionId = search.get("session")!;
+      // The DO is reached at https://do/..., so it cannot know the public
+      // origin — and the ENS records and agent card it builds are URLs other
+      // people have to fetch. Carry the real one.
+      if (isEns || isAgent) search.set("origin", url.origin);
       const doPath =
         url.pathname === "/ws"
           ? "/ws"
           : url.pathname === "/api/state"
             ? "/state"
-            : url.pathname.replace(/^\/api/, ""); // /verify/selfie, /verify/context, ...
+            : url.pathname === "/.well-known/agent.json"
+              ? "/agent-card"
+              : url.pathname.replace(/^\/api/, ""); // /verify/selfie, /agent/<name>, ...
       // getByName: same session id always routes to the same single writer.
       return env.SESSION.getByName(sessionId).fetch(
         new Request(`https://do${doPath}?${search.toString()}`, request)
