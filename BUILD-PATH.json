@@ -1,0 +1,140 @@
+{
+  "version": "1.1.0",
+  "agent": "Technical Documentation Writer",
+  "description": "The Build Path. Twelve slots every agent needs filled. Readiness is DERIVED by checking the repository, never hand-set. Each slot carries a facilitation prompt the agent uses to draw tacit knowledge out of the crew. Prompts ask for war stories, not definitions.",
+  "slots": [
+    {
+      "id": "purpose",
+      "order": 1,
+      "title": "Purpose",
+      "question": "What does this agent do, and what should it refuse?",
+      "files": ["AGENT.md"],
+      "detect": { "path": "AGENT.md", "min_lines": 5 },
+      "earns_ownership": false,
+      "prompt": "In one sentence: what documentation job does this agent do? And name one thing people will ask it for that it should refuse. I'll write both down.",
+      "done_when": "A one-line purpose and at least one explicit non-goal."
+    },
+    {
+      "id": "soul",
+      "order": 2,
+      "title": "Soul",
+      "question": "What does it value, and what will it never do?",
+      "files": ["SOUL.md"],
+      "detect": { "path": "SOUL.md", "min_lines": 10 },
+      "earns_ownership": true,
+      "prompt": "What must this agent never do, even when someone asks nicely? Mine already refuses to document behaviour nobody has verified. What are yours? Two or three red lines.",
+      "done_when": "Purpose, values, ethics and at least two red lines."
+    },
+    {
+      "id": "voice",
+      "order": 3,
+      "title": "Voice",
+      "question": "How does your team's docs sound?",
+      "files": ["PERSONALITY.md", "VOICE.md"],
+      "detect": { "path": "PERSONALITY.md", "min_lines": 8 },
+      "earns_ownership": true,
+      "prompt": "Name a word or phrase that should never appear in your docs, and say why it bothers you. Then: second person or third? Code first or explanation first? Small rules, strong effect.",
+      "done_when": "Register, page structure, and at least three banned words or patterns."
+    },
+    {
+      "id": "knowledge",
+      "order": 4,
+      "title": "Knowledge",
+      "question": "Where do your readers actually get stuck?",
+      "files": ["KNOWLEDGE/**/*.md"],
+      "detect": { "glob": "KNOWLEDGE/**/*.md", "min_files": 3 },
+      "earns_ownership": true,
+      "ongoing": true,
+      "prompt": "Think of the last time you watched someone fail to follow your docs. Where exactly did they stop, and what did they do wrong? That moment is worth more than any style guide, and I'll be able to cite it forever.",
+      "done_when": "At least three atomic, citable units. Grows forever."
+    },
+    {
+      "id": "sources",
+      "order": 5,
+      "title": "Sources and rights",
+      "question": "Where did that knowledge come from, and may we use it?",
+      "files": ["SOURCES/bibliography.md", "SOURCES/RIGHTS.md"],
+      "detect": { "path": "SOURCES/RIGHTS.md", "min_lines": 6 },
+      "earns_ownership": false,
+      "prompt": "Is what you just taught me your own experience, or does it come from a style guide, a book, or another company's docs? I need the rights status recorded before it can stay in my brain.",
+      "done_when": "Every knowledge source has a recorded rights status."
+    },
+    {
+      "id": "skills",
+      "order": 6,
+      "title": "Skills",
+      "question": "How do you personally review a page?",
+      "files": ["SKILLS/**/SKILL.md"],
+      "detect": { "glob": "SKILLS/**/SKILL.md", "min_files": 1 },
+      "earns_ownership": true,
+      "prompt": "Walk me through how you review a doc page, in the order you actually do it. What do you look at first? What tells you within ten seconds that a page is in trouble?",
+      "done_when": "At least one skill with when-to-use, steps, output format and constraints."
+    },
+    {
+      "id": "examples",
+      "order": 7,
+      "title": "Examples",
+      "question": "What does good and bad look like, side by side?",
+      "files": ["EXAMPLES/**/*.md"],
+      "detect": { "glob": "EXAMPLES/**/*.md", "min_files": 1 },
+      "earns_ownership": false,
+      "prompt": "Show me a paragraph from your docs you are proud of, and one that embarrasses you. The contrast teaches me more than a rule does.",
+      "done_when": "At least one worked example with a note on why it is good."
+    },
+    {
+      "id": "mandates",
+      "order": 8,
+      "title": "Mandates",
+      "question": "What may it do on your behalf?",
+      "files": ["MANDATES/PAYMENT.md", "MANDATES/LEGAL.md", "MANDATES/SECURITY.md", "MANDATES/DATA.md", "MANDATES/ESCALATION.md", "MANDATES/AUTHORITY.md"],
+      "detect": { "glob": "MANDATES/*.md", "min_files": 4 },
+      "earns_ownership": false,
+      "prompt": "Now the limits. May it publish, or only draft? How much may it spend without asking? And what is the moment it should stop and fetch a human instead of guessing?",
+      "done_when": "Payment caps, publishing limits, security rules and an escalation trigger."
+    },
+    {
+      "id": "harness",
+      "order": 9,
+      "title": "Harness",
+      "question": "What can it reach?",
+      "files": ["HARNESS/runtime.yaml", "HARNESS/tools.yaml", "HARNESS/guardrails.yaml", "HARNESS/budget.yaml"],
+      "detect": { "glob": "HARNESS/*.yaml", "min_files": 3 },
+      "earns_ownership": false,
+      "prompt": "Which sources should it be allowed to read from: the repo, the live API, the issue tracker? Anything not on the allowlist gets refused.",
+      "done_when": "Runtime lanes, a tool allowlist, guardrails and a budget ceiling."
+    },
+    {
+      "id": "tests",
+      "order": 10,
+      "title": "Tests and red team",
+      "question": "Does it work, and can it be tricked?",
+      "files": ["TESTS/evals/*.yaml", "TESTS/redteam/*.yaml"],
+      "detect": { "glob": "TESTS/**/*.yaml", "min_files": 2 },
+      "earns_ownership": false,
+      "prompt": "Give me a bad paragraph you would use to test whether a new technical writer has good judgement. Then: the sneakiest way someone might get me to approve something I shouldn't.",
+      "done_when": "At least two behaviour tests and two attack tests."
+    },
+    {
+      "id": "ratecard",
+      "order": 11,
+      "title": "Rate card",
+      "question": "What does its work cost?",
+      "files": ["OPS/RATECARD.md"],
+      "detect": { "path": "OPS/RATECARD.md", "min_lines": 4 },
+      "earns_ownership": false,
+      "prompt": "If a stranger wanted one page reviewed, what would you charge them? That price is what I quote when I am hired on a marketplace.",
+      "done_when": "At least one priced service with a turnaround time."
+    },
+    {
+      "id": "ownership",
+      "order": 12,
+      "title": "Ownership",
+      "question": "Who owns it, and who gets paid?",
+      "files": ["CAPTABLE/captable.json"],
+      "detect": { "computed": "captable_has_contributors" },
+      "earns_ownership": false,
+      "prompt": "Nothing to write here. This fills itself in from what each of you taught me, the moment we close the session.",
+      "done_when": "The cap table has at least one contributor with a share."
+    }
+  ]
+}

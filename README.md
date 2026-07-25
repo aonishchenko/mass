@@ -17,10 +17,13 @@ not a shared workspace.
 - [What it is](#what-it-is)
 - [What's genuinely new](#whats-genuinely-new-three-claims-no-more)
 - [How it works](#how-it-works)
+  - [The agent is a repository (git-native)](#the-agent-is-a-repository-git-native)
   - [Authority model](#authority-model)
-  - [The cap table](#the-cap-table)
+  - [Ownership & the cap table](#ownership--the-cap-table)
   - [Payment flow](#payment-flow-hedera)
   - [A brain that cites its teachers](#a-brain-that-cites-its-teachers)
+  - [The Build Path](#the-build-path)
+- [Putting the agent to work](#putting-the-agent-to-work)
 - [Sponsor stack](#sponsor-stack)
 - [The demo, end to end](#the-demo-end-to-end)
 - [Honesty notes](#honesty-notes)
@@ -65,6 +68,24 @@ Everything else (delegation, mandates, audit trails, iNFT minting) is
 
 ## How it works
 
+### The agent is a repository (git-native)
+
+An agent is physically a folder of text — values, knowledge, skills, mandates.
+MASS doesn't compete with git; it stands on it. Putting the agent in a real
+repository gives authorship, history, review, forking, and rollback for free.
+MASS adds the four things git lacks:
+
+- **Proof the author is a unique human** (World)
+- **An immutable anchor so history can't be quietly rewritten** (Hedera)
+- **A private, ownable, transferable snapshot** (0G)
+- **A resolvable public identity** (ENS)
+
+One motion: chat → *"Propose to brain"* → the agent drafts a concrete
+before/after → two verified signatures → merge → hash anchored, snapshot sealed,
+brain reindexed → the agent cites the lines it uses → payment follows those
+lines. See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for how a contribution is
+proposed, signed, and merged.
+
 ### Authority model
 
 Authority is a live function of who is verified and present — not a static role
@@ -76,23 +97,34 @@ list. Permissions recompute whenever the crew changes.
 | **T2 Builder** | World Selfie Check (sybil score recorded) | instruct the agent (DRAFT lane) |
 | **T3 Signer** | Orb-verified via World AgentKit | accept contributions, COMMIT actions |
 
-- **DRAFT** actions need ≥1 Builder present. **COMMIT** actions need 2 Signer
-  co-signatures.
+- **DRAFT** actions need ≥1 Builder present. **COMMIT / MERGE** actions need two
+  distinct verified signatures — the author may be one of them, so at least one
+  other human always signs.
 - Every World proof is **verified server-side** — rendering the widget is never
   enough.
 - Selfie continuity is re-checked on each accepted contribution, so a cap-table
   share can't be claimed from an unattended device.
 
-### The cap table
+### Ownership & the cap table
 
-The cap table is derived directly from the log — nothing else:
+Ownership is **computed from the repository, never hand-set** — the same
+discipline as the readiness check. Only the files that shape the agent earn:
+`KNOWLEDGE/`, `SKILLS/`, `SOUL.md`, `PERSONALITY.md`, `VOICE.md`. Everything else
+is plumbing and earns nothing.
 
 ```
-allocation[seat] = count(contrib.accepted where actor.seat == seat)
+equity = 0.30 × Authorship + 0.70 × Usage
 ```
 
-Each mint references the underlying HCS sequence numbers, so anyone can trace a
-share back to the exact contributions that earned it.
+- **Authorship** — how much of the surviving text in the earning files you wrote
+  (format-only changes don't count).
+- **Usage** — how often the agent actually cites your lines when doing paid work.
+
+Because the log is anchored on-chain and history is append-only, anyone can
+recompute the Authorship Map from the repository at any commit
+(`node scripts/authorship.mjs`) and get the same answer. See
+[`CONTRIBUTING.md`](./CONTRIBUTING.md) for what earns ownership and the house
+rules for knowledge units.
 
 ### Payment flow (Hedera)
 
@@ -109,6 +141,41 @@ The "brain" is curated, encrypted memory + instructions + skills stored on 0G.
 Each accepted contribution becomes a brain chunk tagged with its contributor and
 a per-contributor number. The agent's system prompt requires it to cite inline —
 for example, *"(per Alice's contribution #7)"* — and never to invent citations.
+
+### The Build Path
+
+A first-time crew faces a blank prompt and doesn't know what an agent needs. The
+Build Path fixes that: **the agent tells the crew what it still needs.** Every
+agent needs twelve slots filled — purpose, soul, voice, knowledge, sources,
+skills, examples, mandates, harness, tests, rate card, ownership. Readiness
+(e.g. *"Agent readiness 4 / 12"*) is **derived by checking the repository**, and
+clicking an empty slot drops a facilitation prompt into the composer that
+interviews the crew about that part of itself. The prompts ask for tacit
+knowledge — war stories, red lines, the embarrassing example — not definitions.
+See [`BUILD-PATH.md`](./BUILD-PATH.md) and the slot data in
+[`BUILD-PATH.json`](./BUILD-PATH.json).
+
+---
+
+## Putting the agent to work
+
+Once built, the agent is a hireable, earning asset — and MASS runs its payroll.
+
+- **The weekend's agent** is a **Technical Documentation Writer** (`AGENT.md`),
+  chosen because documentation and code review are named demand categories on
+  the Virtuals ACP marketplace, and doc quality is exactly the tacit,
+  lives-in-two-people's-heads knowledge MASS captures and pays for.
+- **Listing** — a MASS agent is an HTTP endpoint that takes a brief and returns
+  a deliverable, citations, and a TEE attestation, so it lists on marketplaces
+  via the API-only seller path. See
+  [`LISTING-ON-VIRTUALS-ACP.md`](./LISTING-ON-VIRTUALS-ACP.md).
+- **Earnings → payroll** — when a job settles, earnings sweep into the ENS-named
+  Hedera treasury and the split runs: **70% to the authors of the lines cited in
+  that job, 30% pro-rata to all equity holders** (minimum transfer 0.1 HBAR),
+  logged to HCS against the job and its citations. Neither the marketplace nor
+  the settlement layer splits a seller's earnings among the humans who built it —
+  that is MASS's layer. See
+  [`MARKETPLACE-EARNINGS.md`](./MARKETPLACE-EARNINGS.md).
 
 ---
 
@@ -185,8 +252,14 @@ We keep our claims tight and honest:
 
 | File | Purpose |
 |------|---------|
-| [MASS-specs.md](./MASS-specs.md) | v0.6 single source of truth — positioning, authority model, interface contracts, module cards, feature register, merge points, timeline |
+| [MASS-specs.md](./MASS-specs.md) | v0.7 git-native single source of truth — positioning, authority model, interface contracts, module cards, feature register, merge points, timeline |
 | [shared-session-spec.md](./shared-session-spec.md) | Session core module — WS protocol, event sourcing & replay, draft/canonical lanes, contribution lifecycle, 0G brain + archive |
+| [AGENT.md](./AGENT.md) | The weekend's agent — the Technical Documentation Writer: what it is, entry point, what earns ownership |
+| [BUILD-PATH.md](./BUILD-PATH.md) | The guided flow that turns a session into a complete agent (the twelve slots) |
+| [BUILD-PATH.json](./BUILD-PATH.json) | Slot data + facilitation prompts driving the Build Path (readiness is derived, not stored) |
+| [CONTRIBUTING.md](./CONTRIBUTING.md) | How a contribution is proposed, signed, merged, and what earns ownership |
+| [LISTING-ON-VIRTUALS-ACP.md](./LISTING-ON-VIRTUALS-ACP.md) | Putting a co-built agent to work on the Virtuals ACP marketplace |
+| [MARKETPLACE-EARNINGS.md](./MARKETPLACE-EARNINGS.md) | Reading the agent's earnings and how marketplace revenue becomes contributor payouts |
 | [TASKBOARD.md](./TASKBOARD.md) | Checkbox-level execution plan per lane, with merge-point gates |
 | [SUBMISSION-PACK.md](./SUBMISSION-PACK.md) | README skeleton, demo script, booth pitches, video plan, per-track checklists |
 | [PITCH.md](./PITCH.md) | 4-minute pitch script, slide sequence, and an exhaustive Q&A playbook |
@@ -197,7 +270,8 @@ We keep our claims tight and honest:
 
 ## Status
 
-**Pre-build planning complete (spec v0.6).** Build window: Friday evening →
-Sunday 09:00 WEST. See [`TASKBOARD.md`](./TASKBOARD.md) for live progress and
-[`MASS-specs.md`](./MASS-specs.md) for the frozen interface contracts the build
-follows.
+**Building — spec v0.7 (git-native edition).** Demo Sunday 09:00 WEST, with ENS
+and Hedera booth pitches Sunday AM. Weekend scope is one agent end to end — the
+Technical Documentation Writer. See [`TASKBOARD.md`](./TASKBOARD.md) for the
+hour-by-hour run plan and [`MASS-specs.md`](./MASS-specs.md) for the frozen
+interface contracts the build follows.

@@ -1,7 +1,8 @@
 # MASS — Multiplayer Agent Session System
-## Spec v0.6 — FINAL PRE-BUILD EDITION
-**Sat-ready. Demo Sunday 09:00 WEST. TWO booth pitches Sunday AM: ENS + Hedera (in person).**
-**This file is the single source of truth. Companion files: TASKBOARD.md (daily execution), shared-session-spec.md (session core / lanes / contribution lifecycle — M0+M2+M6 detail), world-testing-template.md (World deliverable), SUBMISSION-PACK.md (README/demo/booth/checklists).**
+## Spec v0.7 — GIT-NATIVE EDITION
+**NOW: Sat 25 Jul, afternoon. Demo Sunday 09:00 WEST. TWO booth pitches Sunday AM: ENS + Hedera (in person).**
+**EXECUTION: follow TASKBOARD.md (hour-by-hour run plan + role split). This file is reference only from here on.**
+**This file is the single source of truth. Companion files: TASKBOARD.md (hour-by-hour run plan + roles), AGENT-ANATOMY.md (what an agent is made of), SUBPROJECT-PROOF-OF-TEACHING.md v3 (ownership + royalties, decisions locked), EMPLOYMENT-LAYER.md (taking work from OKX AI / Virtuals ACP), BUILD-PATH.md (the guided flow that completes an agent), LISTING-ON-VIRTUALS-ACP.md (putting the agent to work), MARKETPLACE-EARNINGS.md (reading its earnings), PITCH.md (4-min pitch + Q&A bank), world-testing-template.md (World deliverable), SUBMISSION-PACK.md (README/demo/booth/checklists).**
 
 ---
 
@@ -40,7 +41,7 @@ Foundry, commodity audit infra own that ground; see SUBMISSION-PACK prior-art).
 | T1 Observer | invite link | watch + read log |
 | T2 Builder | World Selfie Check (+ sybil score recorded) | instruct agent (DRAFT lane) |
 | T3 Signer | Orb-verified via AgentKit | accept contributions, COMMIT actions |
-- DRAFT: >=1 T2 present. COMMIT: 2 T3 co-signs. Crew change → recompute perms.
+- DRAFT: >=1 T2 present. COMMIT / MERGE: **2 distinct verified signatures, the author may be one of them** (so at least one other human signs). Crew change → recompute perms.
 - Selfie continuity: re-verify on each accepted contribution.
 - HARD RULE: every World proof is VERIFIED SERVER-SIDE (on-chain or cloud API).
   World judges check this at the pitch. Rendering the widget is NOT enough.
@@ -57,6 +58,33 @@ contribution accepted via 2-of-M co-sign → SEALED processing w/ proof chip +
 immune-system verdict → agent ANSWERS CITING ITS TEACHERS → THE BIRTH
 (cap-table mint per log, Agentic ID + delegations, ENS CV resolves) →
 THE FIRST JOB (outsider pays; split hits crew wallets live).
+
+## A7. THE AGENT IS A REPOSITORY (git-native model — v0.7)
+We do not compete with git; we stand on it. An agent is physically a folder of
+text: values, knowledge, skills, mandates. Putting it in a real repository gives
+us authorship, history, review, forking and rollback for free. We add the four
+things git lacks: **proof the author is a unique human** (World), **an immutable
+anchor so history cannot be quietly rewritten** (Hedera), **a private, ownable,
+transferable snapshot** (0G), and **a resolvable public identity** (ENS).
+
+Flow, one motion: chat → "Propose to brain" → the agent drafts a concrete
+before/after → 2 verified signatures → merge → hash anchored, snapshot sealed,
+brain reindexed → the agent cites the lines it uses → payment follows those lines.
+
+Ownership vocabulary (use these words, never "blame"):
+- **Authorship** — who wrote the parts of the agent still in it today.
+- **Usage** — how much the agent actually leans on those parts in paid work.
+- **Authorship Map** — the UI name for the combined ownership view.
+- `equity = 0.30 × Authorship + 0.70 × Usage`
+
+Locked decisions D1–D12 live in SUBPROJECT-PROOF-OF-TEACHING.md §2. Weekend
+scope: ONE agent, a **Technical Documentation Writer**, full loop end to end.
+Chosen on evidence: code review and technical documentation are the named
+demand categories on the ACP marketplace, where 2 sellers currently serve 3,700
+buyers. Documentation quality is almost entirely tacit knowledge that lives in
+two or three people's heads and leaves when they do, which is exactly what MASS
+captures and pays for.
+
 
 ---
 
@@ -82,8 +110,6 @@ THE FIRST JOB (outsider pays; split hits crew wallets live).
 | 4 | Agent public CV page (ENS-resolved employee record) | M1/M5 | ~2h |
 | 5 | Selfie continuity ping on each acceptance | M3 | ~1h |
 | 6 | Challenge state in contribution lifecycle (propose→challenge→accept) | M0/M1 | ~1-2h |
-| 7 | Batch harvest review, manual (shared-session-spec §7.5) — mid-session + at close | M0/M1 | ~2h |
-| 8 | Harvest candidate extraction via draft lane (§7.5.2) — enhancement on 7 | M2 | ~1h |
 
 ## B3. NICE TO HAVE BUT TAKES SOME TIME (start ONLY if B1 done and B2 items 1-3 green by Sat evening; half-finished = worse than none)
 | # | Feature | Module | Cost | Why it still tempts us |
@@ -92,8 +118,7 @@ THE FIRST JOB (outsider pays; split hits crew wallets live).
 | 2 | ERC-8004 registration + ENSIP-25 verification loop | M4+M5 | 3-5h — SIGNIFICANTLY INCREASES DEV TIME (new integration surface: registry contract + verification flow) | One integration, extra points at BOTH Hedera and ENS; explicitly flagged "new and interesting" by ENS |
 
 ## B4. Cut order under pressure (apply without discussion)
-B2.8 → B3.2 → B3.1 → B2.7 → B2.6 → B2.5 → B2.4 → B2.3 → B2.2 → B2.1
-(fight for B2.1/B2.2). B2.8 goes first because B2.7 works without it.
+B3.2 → B3.1 → B2.6 → B2.5 → B2.4 → B2.3 → B2.2 → B2.1 (fight for B2.1/B2.2).
 NEVER cut anything in B1. NEVER cut: honest inference path, Selfie gate +
 server verification, HCS log, contribution-weighted mint, >=1 Hedera payment,
 live ENS resolution, deployed URL.
@@ -101,11 +126,6 @@ live ENS resolution, deployed URL.
 ---
 
 # PART C — INTERFACE CONTRACTS (frozen; changing = both agree)
-
-> Payload shapes, the Intent/Event/delta split, replay determinism rules and
-> additive schema extensions live in **[shared-session-spec.md](./shared-session-spec.md) §3, §4, §9**.
-> That file may ADD to C1–C4; it may never remove or rename. One open rename
-> decision (`draft.*`/`canonical.*` → `run.*`) sits in its §9.1 — resolve before M0.
 
 ## C1. Event schema (the spine)
 ```ts
@@ -161,10 +181,9 @@ interface InferenceProvider {
   sealed: boolean;
   getAttestation?(responseId: string): Promise<AttestationRef | null>;
 }
+// lane="draft" → fastest non-sealed; lane="canonical" → sealed or throws
+// SealedUnavailable → UI honesty banner (exact copy in SUBMISSION-PACK).
 ```
-Lane semantics — what each lane may touch, payment, attestation, why canonical
-throws rather than downgrades: **shared-session-spec §6**. Honesty banner copy:
-SUBMISSION-PACK.
 
 ## C4. Worker interfaces (each ships src/<module>/mock.ts: deterministic, 300ms, logged)
 ```ts
@@ -199,17 +218,11 @@ delegateUser(tokenId, address): Promise<void>
 
 # PART D — MODULE CARDS (execution detail in TASKBOARD.md)
 
-> **M0 + M2 + M6 form one vertical slice — "Session Room v0" — owned by
-> [shared-session-spec.md](./shared-session-spec.md).** Their cards below carry
-> only what other modules must know; build order, DoD and all internals live in
-> that file. M1/M3/M4/M5/M7/M8 remain owned here.
-
 ### M0 CORE (pair, tonight ~90m) — blocks all
-Repo, types (C1-C4), WS transport, session state, and the authority engine as
-pure `computePerms(crew)` implementing A4 (incl. last-T3-leaves →
+Repo, types (C1-C4), WS event bus, in-memory session state, authority engine
+as pure `computePerms(crew)` w/ 5 unit tests (incl. last-T3-leaves →
 complete-then-lock; challenge state transition).
-**Owned by shared-session-spec §2-§4** — protocol, replay, determinism rules.
-DoD: that file §11.
+DoD: two browser tabs share one mocked event stream; tests green.
 
 ### M1 UI COCKPIT (T shell, N copy) — needs M0
 Stream pane, log ticker (renders ONLY from MassEvents), seat badges
@@ -220,18 +233,16 @@ availability, cap table — zero hex anywhere).
 DoD (mocks): full arc clickable start→Birth→First Job with fake data.
 
 ### M2 INFERENCE ROUTER (T) — needs M0
-Tonight (KILL-OR-CONTINUE): curl 0G PC (TG promo key), record
-`[0G LATENCY: ____ tok/s | sealed models: ____]` in Part F. Attestation surface
-per booth answer.
-**Owned by shared-session-spec §6, §8.3** — adapter, both lanes, citation prompt,
-Router-vs-direct-broker migration. DoD: that file §11.
+One adapter, three base URLs. Tonight: curl 0G PC (TG promo key), record
+`[0G LATENCY: ____ tok/s | sealed models: ____]` here. Attestation fetch per
+booth answer. Citation system-prompt wired into canonical lane (C2).
+DoD: draft lane streams in UI; canonical lane returns attestationRef
+(real or mock per latency outcome).
 
 ### M3 WORLD (N) — needs M0
 Selfie on seat claim → SERVER-SIDE VERIFY (hard gate) → sybil score into
 event + badge. AgentKit T3 delegation (booth: native multi-principal or
 server-side aggregation). Continuity ping on acceptance (B2.5).
-Continuity on a BATCH acceptance (harvest, B2.7): one ping per signing T3 per
-batch, logged with the contribIds it covers — shared-session-spec §7.5.4.
 B3.1 stretch: one COMMIT action flips to "regulated" requiring
 verifyIdentity(over18) + write the one-page necessity/minimization note.
 EVERY friction → world-testing-template.md AS IT HAPPENS (dated).
@@ -257,13 +268,12 @@ B3.2 stretch: verifyEnsip25 loop. Grep-for-hex check before freeze.
 DoD: fresh wallet resolves seat + agent profile live; demo shows zero hex.
 
 ### M6 0G BRAIN + IDENTITY (T) — needs M2
-PINNED SDK versions (old flow-contract tutorials are wrong; `@0gfoundation/*`,
-not `@0glabs/*`). screenContribution (B2.2) before acceptance, verdict logged.
-brainRoot → M5 text record. mintAgenticId at close + delegateUser per T3.
-**Storage, brain/archive split and contribution lifecycle owned by
-shared-session-spec §7-§8.**
-DoD: Agentic ID on explorer with >=2 delegated users; brain/citation DoD in
-shared-session-spec §11.
+Log storage uploader/downloader, first-party encryption, PINNED SDK versions
+(old flow-contract tutorials are wrong). writeBrain(BrainChunk[]) on each
+acceptance → rootHash → event → M5 record. screenContribution (B2.2) before
+acceptance, verdict logged. mintAgenticId at close + delegateUser per T3.
+DoD: brain round-trips; citations resolve to real chunks; Agentic ID on
+explorer with >=2 delegated users.
 
 ### M7 THE BIRTH + FIRST JOB (pair, after MP2)
 `closeSession()`: cap table from log → mint → Agentic ID + delegations →
@@ -295,23 +305,9 @@ DoD: checklist 100%; N can run the entire demo alone.
   machine. 09:00 presentation. Then ENS booth + Hedera booth pitches.
 
 # PART F — REMAINING OPEN BLANKS (fill in as answered)
-[0G LATENCY: **23.7 tok/s** streaming, measured 2026-07-25 testnet Router]
-[0G attestation surface: **per-key trust mode** — Standard / Verified / Private
- (TEE enclave). Fixed at key creation, so draft and canonical use TWO keys.
- Every response carries `x_0g_trace` {billing.total_cost, provider, request_id}]
-[sealed models: **qwen2.5-omni** — tee_attested, TeeTLS/TDX, ctx 32768. It is the
- ONLY chatbot model on testnet; mainnet also has MiniMax-M3, GLM-5.1]
+[0G LATENCY: ____] [0G attestation surface: ____] [sealed models: ____]
 [ENS NET: ____] [AgentKit multi-principal: ____] [prize-selection cap: ____]
-
-VERIFIED LIVE 2026-07-25 (Workers + Durable Objects, testnet):
-seats -> draft stream -> propose -> 2-of-M co-sign -> accept -> brain on 0G
-Storage (rootHash 0x82bdb783...) -> canonical answer citing
-"(per alice's contribution #1)". Novelty claim #3 demonstrated end to end.
 Honesty banner copy: "Unsealed mode — running on <provider>; no attestation
 available for this response."
-Open decisions in shared-session-spec (resolve before M0):
-[§9.1 event rename draft.*/canonical.* → run.*: ____ (default: keep frozen names)]
-Resolved: §7.5 — BOTH review modes are built (live acceptance + batch harvest,
-mid-session and at close). Harvest = B2.7/B2.8, cut order in B4.
 
 *v0.6 supersedes all prior versions. N = Niek, T = teammate.*
