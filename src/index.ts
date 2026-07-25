@@ -72,16 +72,22 @@ export default {
       return Response.json(stats);
     }
 
-    if (url.pathname === "/ws" || url.pathname === "/api/state") {
-      const sessionId = url.searchParams.get("session") ?? "default";
+    // WebSocket, session state, and World verification all route to the single
+    // writer for the session. /api/verify/* is the M3 server-side proof gate.
+    const isVerify = url.pathname.startsWith("/api/verify/");
+    if (url.pathname === "/ws" || url.pathname === "/api/state" || isVerify) {
+      const search = url.searchParams;
+      if (!search.get("session")) search.set("session", "default");
+      const sessionId = search.get("session")!;
+      const doPath =
+        url.pathname === "/ws"
+          ? "/ws"
+          : url.pathname === "/api/state"
+            ? "/state"
+            : url.pathname.replace(/^\/api/, ""); // /verify/selfie, /verify/context, ...
       // getByName: same session id always routes to the same single writer.
       return env.SESSION.getByName(sessionId).fetch(
-        new Request(
-          url.pathname === "/api/state"
-            ? `https://do/state?session=${sessionId}`
-            : `https://do/ws?session=${sessionId}`,
-          request
-        )
+        new Request(`https://do${doPath}?${search.toString()}`, request)
       );
     }
 

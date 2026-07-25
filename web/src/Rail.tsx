@@ -5,8 +5,28 @@
  */
 
 import { useState, type FC } from "react";
-import { CheckIcon, DatabaseIcon, ScrollTextIcon, SproutIcon, UsersIcon } from "lucide-react";
-import type { Intent, SessionView } from "./session";
+import {
+  CheckIcon,
+  DatabaseIcon,
+  ScrollTextIcon,
+  ShieldCheckIcon,
+  SproutIcon,
+  UsersIcon,
+} from "lucide-react";
+import { perms, type Intent, type SessionView } from "./session";
+
+type VerifyFn = (kind: "selfie" | "agentkit") => Promise<{
+  token: string;
+  sybilScore?: number;
+  dev: boolean;
+}>;
+
+/** Tier → label + distinct badge styling, so authority is legible at a glance. */
+const TIER: Record<string, { label: string; cls: string }> = {
+  T1: { label: "Observer", cls: "bg-[#1a1a18]/8 text-[var(--color-muted)]" },
+  T2: { label: "Builder", cls: "bg-sky-600/15 text-sky-800" },
+  T3: { label: "Signer", cls: "bg-emerald-600/18 text-emerald-800" },
+};
 
 const Section: FC<{ icon: React.ReactNode; title: string; children: React.ReactNode }> = ({
   icon,
@@ -21,20 +41,51 @@ const Section: FC<{ icon: React.ReactNode; title: string; children: React.ReactN
   </section>
 );
 
-const tierLabel: Record<string, string> = {
-  T1: "Observer",
-  T2: "Builder",
-  T3: "Signer",
-};
-
-export const Rail: FC<{ view: SessionView; send: (i: Intent) => void }> = ({ view, send }) => {
+export const Rail: FC<{
+  view: SessionView;
+  send: (i: Intent) => void;
+  verify: VerifyFn;
+  verifying: boolean;
+}> = ({ view, send, verify, verifying }) => {
   const [name, setName] = useState("");
   const [copied, setCopied] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [delegating, setDelegating] = useState(false);
   const sessionId = new URLSearchParams(location.search).get("session") ?? "default";
   const seats = Object.values(view.seats);
   const seated = !!view.you;
+  const me = view.you ? view.seats[view.you] : undefined;
+  const p = perms(view);
   const pending = Object.values(view.contributions).filter((c) => c.state === "proposed");
   const accepted = Object.values(view.contributions).filter((c) => c.state === "accepted");
+
+  // Seat claim requires a SERVER-verified Selfie Check; the token is issued only
+  // after /api/verify/selfie succeeds. See web/src/world.tsx.
+  const claim = async () => {
+    if (!name.trim() || verifying) return;
+    setAuthError(null);
+    try {
+      const r = await verify("selfie");
+      send({ kind: "claimSeat", name: name.trim(), selfieToken: r.token });
+    } catch (e) {
+      setAuthError(e instanceof Error ? e.message : "Selfie Check failed");
+    }
+  };
+
+  // Become a Signer: Orb / AgentKit delegation to the session agent.
+  const delegate = async () => {
+    if (verifying || delegating) return;
+    setDelegating(true);
+    setAuthError(null);
+    try {
+      const r = await verify("agentkit");
+      send({ kind: "delegate", agentkitToken: r.token });
+    } catch (e) {
+      setAuthError(e instanceof Error ? e.message : "Orb verification failed");
+    } finally {
+      setDelegating(false);
+    }
+  };
 
   return (
     <aside className="flex h-full w-[340px] shrink-0 flex-col overflow-y-auto border-l border-[#1a1a18]/10 bg-[#e9e4d6] font-sans text-[13px] text-[var(--color-ink)]">
@@ -79,43 +130,92 @@ export const Rail: FC<{ view: SessionView; send: (i: Intent) => void }> = ({ vie
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && name.trim() && send({ kind: "claimSeat", name })}
+              onKeyDown={(e) => e.key === "Enter" && claim()}
               placeholder="your name"
-              className="min-w-0 flex-1 rounded-md border border-[#1a1a18]/15 bg-white/70 px-2 py-1.5 outline-none"
+              disabled={verifying}
+              className="min-w-0 flex-1 rounded-md border border-[#1a1a18]/15 bg-white/70 px-2 py-1.5 outline-none disabled:opacity-50"
             />
             <button
-              onClick={() => name.trim() && send({ kind: "claimSeat", name })}
-              className="rounded-md bg-[var(--color-ink)] px-3 py-1.5 text-[var(--color-cream)] hover:opacity-85"
+              onClick={claim}
+              disabled={!name.trim() || verifying}
+              className="rounded-md bg-[var(--color-ink)] px-3 py-1.5 text-[var(--color-cream)] hover:opacity-85 disabled:opacity-40"
             >
-              Join
+              {verifying ? "Verifying…" : "Verify & join"}
             </button>
           </div>
+          <p className="pt-1.5 text-[11px] leading-snug text-[var(--color-muted)]">
+            A World <strong>Selfie Check</strong> proves you’re a unique human before
+            you can build — it’s what makes each ownership share sybil-proof.
+          </p>
+          {authError && <p className="pt-1 text-[11px] text-red-700">{authError}</p>}
         </div>
       )}
 
       <Section icon={<UsersIcon size={12} />} title={`Crew (${seats.length})`}>
         <ul className="space-y-1.5">
-          {seats.map((s) => (
-            <li key={s.seat} className="flex items-center justify-between">
-              <span className={s.seat === view.you ? "font-semibold" : ""}>
-                {s.name}
-                {s.seat === view.you && " (you)"}
-              </span>
-              <span className="flex items-center gap-1.5">
-                {s.sybilScore !== undefined && (
-                  <span
-                    title="World sybil score"
-                    className="rounded-full bg-emerald-600/12 px-1.5 py-0.5 text-[10px] text-emerald-800"
-                  >
-                    ✓ {s.sybilScore}
+          {seats.map((s) => {
+            const t = TIER[s.tier] ?? TIER.T1;
+            return (
+              <li
+                key={s.seat}
+                className={`flex items-center justify-between ${s.present ? "" : "opacity-45"}`}
+              >
+                <span className={s.seat === view.you ? "font-semibold" : ""}>
+                  {s.name}
+                  {s.seat === view.you && " (you)"}
+                  {!s.present && <span className="text-[10px] text-[var(--color-faint)]"> · away</span>}
+                </span>
+                <span className="flex items-center gap-1.5">
+                  {s.sybilScore !== undefined && (
+                    <span
+                      title="World sybil score (0–1), derived from credential strength. Below the app threshold a seat is Observer-only."
+                      className="rounded-full bg-[#1a1a18]/6 px-1.5 py-0.5 text-[10px] tabular-nums text-[var(--color-muted)]"
+                    >
+                      sybil {s.sybilScore.toFixed(2)}
+                    </span>
+                  )}
+                  <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${t.cls}`}>
+                    {t.label}
                   </span>
-                )}
-                <span className="text-[11px] text-[var(--color-muted)]">{tierLabel[s.tier]}</span>
-              </span>
-            </li>
-          ))}
+                </span>
+              </li>
+            );
+          })}
           {seats.length === 0 && <li className="text-[var(--color-faint)]">nobody yet</li>}
         </ul>
+
+        {/* Live quorum readout — the authority co-signing depends on (recomputes
+            the instant a signer joins or leaves). */}
+        {seated && (
+          <p className="pt-2 text-[11px] text-[var(--color-muted)]">
+            {p.presentT3}/2 signers present · commit actions{" "}
+            <span className={p.canCommit ? "text-emerald-800" : "text-amber-800"}>
+              {p.canCommit ? "unlocked" : "locked"}
+            </span>
+          </p>
+        )}
+
+        {/* Observer: a verified human whose sybil score is below threshold. */}
+        {me?.tier === "T1" && (
+          <p className="pt-1.5 text-[11px] leading-snug text-amber-800">
+            You’re an <strong>Observer</strong>
+            {me.sybilScore !== undefined ? ` (sybil ${me.sybilScore.toFixed(2)}, below threshold)` : ""}:
+            you can watch, but not propose, co-sign, or earn equity.
+          </p>
+        )}
+
+        {/* Builder → Signer via Orb / AgentKit delegation to the session agent. */}
+        {me?.tier === "T2" && (
+          <button
+            onClick={delegate}
+            disabled={verifying || delegating}
+            className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-md border border-emerald-700/30 bg-emerald-600/10 py-1.5 text-[12px] text-emerald-900 hover:bg-emerald-600/15 disabled:opacity-40"
+          >
+            <ShieldCheckIcon size={13} />
+            {delegating ? "Verifying with Orb…" : "Become a Signer (Orb)"}
+          </button>
+        )}
+        {authError && seated && <p className="pt-1 text-[11px] text-red-700">{authError}</p>}
       </Section>
 
       <Section icon={<SproutIcon size={12} />} title="Awaiting co-sign">
@@ -136,14 +236,20 @@ export const Rail: FC<{ view: SessionView; send: (i: Intent) => void }> = ({ vie
                   <div className="flex items-center justify-between pt-1.5">
                     <span className="text-[11px] text-[var(--color-faint)]">
                       {c.cosigners.length}/2 co-signed
-                      {mine && c.cosigners.length < 2 && " — needs another seat"}
+                      {c.cosigners.length < 2 &&
+                        (p.presentT3 < 2
+                          ? " — needs 2 signers present"
+                          : mine
+                            ? " — needs another signer"
+                            : "")}
                     </span>
                     <button
                       onClick={() => send({ kind: "cosign", contribId: c.contribId })}
-                      disabled={!seated || !!mine}
+                      disabled={me?.tier !== "T3" || !!mine}
+                      title={me?.tier === "T3" ? undefined : "Only Signers (Orb-verified) can co-sign"}
                       className="rounded bg-[var(--color-accent)] px-2 py-1 text-[11px] text-white hover:opacity-85 disabled:opacity-30"
                     >
-                      {mine ? "signed" : "Co-sign"}
+                      {mine ? "signed" : me?.tier === "T3" ? "Co-sign" : "Signers only"}
                     </button>
                   </div>
                 </li>

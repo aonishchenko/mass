@@ -11,7 +11,7 @@
 
 import { DurableObject } from "cloudflare:workers";
 import { newId, payloadHash } from "./core/ids.js";
-import { authorize, computePerms } from "./core/perms.js";
+import { atLeast, authorize, computePerms } from "./core/perms.js";
 import { append, capTable } from "./core/reduce.js";
 import {
   EMPTY_SESSION,
@@ -29,6 +29,14 @@ import {
 import { extractCandidates, runInference } from "./zg/inference.js";
 import { writeArchive, writeBrain } from "./zg/storage.js";
 import { mockScreen } from "./world/mock.js";
+import { buildContext } from "./world/context.js";
+import {
+  issueToken,
+  sybilThreshold,
+  verifyToken,
+  verifyWorldProof,
+  type VerifyKind,
+} from "./world/verify.js";
 import {
   anchorEvent,
   hederaEnabled,
@@ -57,6 +65,16 @@ export interface Env {
   HEDERA_COMPUTE_ACCOUNT_ID?: string;
   HEDERA_CAPTABLE_TOKEN_ID?: string;
   HEDERA_INFERENCE_PRICE_HBAR?: string;
+  // World (M3) — server-side proof verification. See docs/WORLD-SETUP.md.
+  WORLD_APP_ID?: string;
+  WORLD_RP_ID?: string;
+  WORLD_VERIFY_URL?: string;
+  WORLD_ACTION_SELFIE?: string;
+  WORLD_ACTION_AGENTKIT?: string;
+  WORLD_ENV?: string;
+  WORLD_SYBIL_THRESHOLD?: string;
+  WORLD_RP_PRIVATE_KEY?: string;
+  WORLD_DEV_FALLBACK?: string;
 }
 
 interface SocketMeta {
@@ -91,6 +109,18 @@ export class SessionRoom extends DurableObject<Env> {
            seat TEXT NOT NULL
          )`
       );
+      // Sanitized record of every server-side verification, so the check can be
+      // shown live at the booth (World rubric: proofs verified server-side).
+      this.ctx.storage.sql.exec(
+        `CREATE TABLE IF NOT EXISTS verify_log (
+           id INTEGER PRIMARY KEY AUTOINCREMENT,
+           ts INTEGER NOT NULL,
+           kind TEXT NOT NULL,
+           ok INTEGER NOT NULL,
+           dev INTEGER NOT NULL,
+           detail TEXT NOT NULL
+         )`
+      );
       // Persist first, cache second: memory is rebuilt by folding the log.
       const rows = this.ctx.storage.sql
         .exec<{ body: string }>("SELECT body FROM events ORDER BY seq")
@@ -117,6 +147,17 @@ export class SessionRoom extends DurableObject<Env> {
         eventCount: this.session.events.length,
       });
     }
+
+    // World server-side verification (M3 hard gate). These are plain HTTPS
+    // requests, not the WebSocket — a proof is checked here, on the server,
+    // before any seat is granted.
+    if (url.pathname.endsWith("/verify/context")) {
+      const kind: VerifyKind = url.searchParams.get("kind") === "agentkit" ? "agentkit" : "selfie";
+      return Response.json(buildContext(this.env, kind));
+    }
+    if (url.pathname.endsWith("/verify/selfie")) return this.handleVerify(request, "selfie");
+    if (url.pathname.endsWith("/verify/agentkit")) return this.handleVerify(request, "agentkit");
+    if (url.pathname.endsWith("/verify/log")) return this.handleVerifyLog();
 
     if (request.headers.get("Upgrade") !== "websocket") {
       return new Response("expected websocket", { status: 426 });
@@ -285,7 +326,9 @@ export class SessionRoom extends DurableObject<Env> {
   private async handle(intent: Intent, seat: Seat | null, ws: WebSocket) {
     switch (intent.kind) {
       case "claimSeat":
-        return this.claimSeat(intent.name, ws);
+        return this.claimSeat(intent.name, intent.selfieToken, ws);
+      case "delegate":
+        return this.delegate(intent.agentkitToken, seat!, ws);
       case "resumeSeat":
         return this.resumeSeat(intent.token, ws);
       case "instruct":
@@ -321,17 +364,36 @@ export class SessionRoom extends DurableObject<Env> {
     }
   }
 
-  private async claimSeat(name: string, ws: WebSocket) {
+  private async claimSeat(name: string, selfieToken: string, ws: WebSocket) {
+    // HARD GATE: a seat is granted only against a token the SERVER minted after
+    // it verified a Selfie proof with World (see handleVerify). A client may send
+    // any name, but never a valid token it did not earn — rendering the IDKit
+    // widget is not enough.
+    const claims = await verifyToken(this.env, selfieToken);
+    if (!claims || claims.kind !== "selfie") {
+      return this.sendError(ws, "Seat claim requires a verified Selfie Check.", "claimSeat");
+    }
+
     const seatId = newId("s");
     await this.emit("seat.claimed", { seat: seatId, name, tier: "T1" }, { system: true });
 
-    // Mocked until M3 wires server-side World verification (spec DoD hard gate).
+    // Sybil score gates capability (HARD REQUIREMENT 2): below threshold the seat
+    // is an Observer — a verified human, but not trusted to propose, co-sign, or
+    // earn equity. The reason is derivable in the UI from tier + score.
+    const threshold = sybilThreshold(this.env);
+    const grantedTier: "T1" | "T2" = claims.sybilScore >= threshold ? "T2" : "T1";
     await this.emit(
       "verify.selfie.ok",
-      { seat: seatId, sybilScore: 0.87, attestationHash: `mock_${seatId}` },
+      {
+        seat: seatId,
+        sybilScore: claims.sybilScore,
+        nullifierHash: claims.nullifierHash,
+        grantedTier,
+        threshold,
+        dev: claims.dev,
+      },
       { system: true }
     );
-    await this.emit("verify.agentkit.ok", { seat: seatId }, { system: true });
 
     const token = newId("tok") + crypto.randomUUID().replace(/-/g, "");
     this.ctx.storage.sql.exec(
@@ -346,6 +408,101 @@ export class SessionRoom extends DurableObject<Env> {
     ws.send(JSON.stringify({ t: "sync", events: this.session.events, you: seatId } satisfies Frame));
     await this.sendCandidates(ws);
     await this.recomputePerms();
+  }
+
+  /**
+   * Become a Signer by delegating to the session agent (HARD REQUIREMENT 3).
+   * The token proves an Orb / AgentKit proof was verified server-side; the seat
+   * must already be a Builder. Emitting verify.agentkit.ok recomputes authority
+   * live for the whole room.
+   */
+  private async delegate(agentkitToken: string, seat: Seat, ws: WebSocket) {
+    const claims = await verifyToken(this.env, agentkitToken);
+    if (!claims || claims.kind !== "agentkit") {
+      return this.sendError(ws, "Signer delegation requires a verified Orb / AgentKit proof.", "delegate");
+    }
+    if (!atLeast(seat.tier, "T2")) {
+      return this.sendError(ws, "Become a Builder (Selfie Check) before delegating as a Signer.", "delegate");
+    }
+    if (seat.tier === "T3") return; // already a signer
+
+    await this.emit(
+      "verify.agentkit.ok",
+      { seat: seat.seat, proofRef: claims.nullifierHash, principal: claims.nullifierHash, dev: claims.dev },
+      { system: true }
+    );
+    await this.recomputePerms();
+  }
+
+  // -------------------------------------------------------------------------
+  // World — server-side verification handlers (M3 hard gate)
+  // -------------------------------------------------------------------------
+
+  /**
+   * Verify an IDKit proof against World's cloud API, HERE on the server, and
+   * only then mint an HMAC-signed token the DO will trust. A forged proof gets a
+   * 401. Every attempt is logged (sanitized) for the on-stage check.
+   */
+  private async handleVerify(request: Request, kind: VerifyKind): Promise<Response> {
+    let proof: unknown = null;
+    try {
+      const body = (await request.json()) as { proof?: unknown };
+      proof = body?.proof ?? null;
+    } catch {
+      /* proof stays null → verification fails cleanly */
+    }
+
+    const outcome = await verifyWorldProof(this.env, kind, proof as never);
+
+    this.ctx.storage.sql.exec(
+      "INSERT INTO verify_log (ts, kind, ok, dev, detail) VALUES (?, ?, ?, ?, ?)",
+      outcome.verifiedAt,
+      kind,
+      outcome.ok ? 1 : 0,
+      outcome.dev ? 1 : 0,
+      JSON.stringify(outcome.raw ?? { error: outcome.error })
+    );
+
+    if (!outcome.ok) {
+      return Response.json({ ok: false, error: outcome.error ?? "verification failed" }, { status: 401 });
+    }
+
+    const token = await issueToken(this.env, kind, outcome);
+    if (kind === "selfie") {
+      return Response.json({
+        ok: true,
+        nullifierHash: outcome.nullifierHash,
+        sybilScore: outcome.sybilScore,
+        verifiedAt: outcome.verifiedAt,
+        dev: outcome.dev,
+        token,
+      });
+    }
+    return Response.json({
+      ok: true,
+      proofRef: outcome.nullifierHash,
+      principal: outcome.nullifierHash,
+      verifiedAt: outcome.verifiedAt,
+      dev: outcome.dev,
+      token,
+    });
+  }
+
+  /** The booth-showable verification log (newest first, sanitized). */
+  private handleVerifyLog(): Response {
+    const rows = this.ctx.storage.sql
+      .exec<{ ts: number; kind: string; ok: number; dev: number; detail: string }>(
+        "SELECT ts, kind, ok, dev, detail FROM verify_log ORDER BY id DESC LIMIT 100"
+      )
+      .toArray()
+      .map((r) => ({
+        ts: r.ts,
+        kind: r.kind,
+        ok: r.ok === 1,
+        dev: r.dev === 1,
+        detail: JSON.parse(r.detail) as unknown,
+      }));
+    return Response.json({ verifications: rows });
   }
 
   /**

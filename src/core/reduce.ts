@@ -7,6 +7,7 @@
  */
 
 import type {
+  AgentKitOkPayload,
   ArchiveWrittenPayload,
   BrainUpdatedPayload,
   ContribAcceptedPayload,
@@ -61,26 +62,46 @@ export function apply(s: Session, e: MassEvent): Session {
       const p = e.payload as SelfieOkPayload;
       const seat = s.seats[p.seat];
       if (!seat) return s;
+      // grantedTier, not a hardcoded T2: a sybil score below threshold keeps the
+      // seat an Observer (T1) — verified human, but not trusted to earn equity.
       return {
         ...s,
         seats: {
           ...s.seats,
-          [p.seat]: { ...seat, tier: "T2", sybilScore: p.sybilScore },
+          [p.seat]: {
+            ...seat,
+            tier: p.grantedTier,
+            sybilScore: p.sybilScore,
+            nullifierHash: p.nullifierHash,
+            verifiedAt: e.ts,
+          },
         },
       };
     }
 
     case "verify.agentkit.ok": {
-      const p = e.payload as { seat: string };
+      const p = e.payload as AgentKitOkPayload;
       const seat = s.seats[p.seat];
       if (!seat) return s;
-      return { ...s, seats: { ...s.seats, [p.seat]: { ...seat, tier: "T3" } } };
+      return {
+        ...s,
+        seats: {
+          ...s.seats,
+          [p.seat]: { ...seat, tier: "T3", proofRef: p.proofRef, verifiedAt: e.ts },
+        },
+      };
     }
 
     case "verify.continuity.ok": {
-      // Recorded for audit; covers[] is the batch case (§7.5.4). No state change.
-      void (e.payload as ContinuityOkPayload);
-      return s;
+      // Continuity re-verification (§B2.5): stamp the seat so an equity share
+      // cannot be claimed from an unattended device. covers[] is the batch case.
+      const p = e.payload as ContinuityOkPayload;
+      const seat = s.seats[p.seat];
+      if (!seat) return s;
+      return {
+        ...s,
+        seats: { ...s.seats, [p.seat]: { ...seat, lastContinuityAt: e.ts } },
+      };
     }
 
     case "contrib.proposed": {

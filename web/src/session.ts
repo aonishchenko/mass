@@ -52,7 +52,12 @@ export interface Contribution {
 export interface SessionView {
   connected: boolean;
   you: string | null;
-  seats: Record<string, { seat: string; name: string; tier: Tier; sybilScore?: number }>;
+  seats: Record<
+    string,
+    { seat: string; name: string; tier: Tier; sybilScore?: number; present: boolean }
+  >;
+  /** True once any verification was issued by the DEV fallback (honesty banner). */
+  devMode: boolean;
   events: MassEvent[];
   turns: Turn[];
   contributions: Record<string, Contribution>;
@@ -90,6 +95,7 @@ const EMPTY: SessionView = {
   closed: false,
   running: false,
   runningForYou: false,
+  devMode: false,
 };
 
 /** The same fold the server does — replay yields identical state (§4). */
@@ -97,19 +103,40 @@ function apply(v: SessionView, e: MassEvent): SessionView {
   const p = e.payload ?? {};
   switch (e.type) {
     case "seat.claimed":
-      return { ...v, seats: { ...v.seats, [p.seat]: { seat: p.seat, name: p.name, tier: p.tier } } };
-    case "seat.left":
-    case "seat.rejoined":
-      return v;
+      return {
+        ...v,
+        seats: { ...v.seats, [p.seat]: { seat: p.seat, name: p.name, tier: p.tier, present: true } },
+      };
+    case "seat.left": {
+      const s = v.seats[p.seat];
+      if (!s) return v;
+      // Presence drives live authority: a signer leaving must reduce quorum on
+      // screen, not just server-side (MASS-specs A4, DoD 5).
+      return { ...v, seats: { ...v.seats, [p.seat]: { ...s, present: false } } };
+    }
+    case "seat.rejoined": {
+      const s = v.seats[p.seat];
+      if (!s) return v;
+      return { ...v, seats: { ...v.seats, [p.seat]: { ...s, present: true } } };
+    }
     case "verify.selfie.ok": {
       const s = v.seats[p.seat];
       if (!s) return v;
-      return { ...v, seats: { ...v.seats, [p.seat]: { ...s, tier: "T2", sybilScore: p.sybilScore } } };
+      // grantedTier, not a hardcoded T2: a low sybil score keeps this an Observer.
+      return {
+        ...v,
+        devMode: v.devMode || !!p.dev,
+        seats: { ...v.seats, [p.seat]: { ...s, tier: p.grantedTier, sybilScore: p.sybilScore } },
+      };
     }
     case "verify.agentkit.ok": {
       const s = v.seats[p.seat];
       if (!s) return v;
-      return { ...v, seats: { ...v.seats, [p.seat]: { ...s, tier: "T3" } } };
+      return {
+        ...v,
+        devMode: v.devMode || !!p.dev,
+        seats: { ...v.seats, [p.seat]: { ...s, tier: "T3" } },
+      };
     }
     case "instruct":
       return {
@@ -325,10 +352,14 @@ export function useSession(sessionId: string) {
   return { view, send, clearError };
 }
 
-/** Live authority (MASS-specs A4), recomputed client-side for affordances only. */
+/**
+ * Live authority (MASS-specs A4), recomputed client-side for affordances only.
+ * Counts PRESENT seats, mirroring the server's computePerms — so when a signer
+ * leaves, the co-sign affordance disables immediately (DoD 5).
+ */
 export function perms(view: SessionView) {
-  const seats = Object.values(view.seats);
-  const t2 = seats.filter((s) => s.tier === "T2" || s.tier === "T3").length;
-  const t3 = seats.filter((s) => s.tier === "T3").length;
-  return { canDraft: t2 >= 1, canCommit: t3 >= 2, presentT2: t2, presentT3: t3 };
+  const present = Object.values(view.seats).filter((s) => s.present);
+  const presentT2 = present.filter((s) => s.tier === "T2" || s.tier === "T3").length;
+  const presentT3 = present.filter((s) => s.tier === "T3").length;
+  return { canDraft: presentT2 >= 1, canCommit: presentT3 >= 2, presentT2, presentT3 };
 }

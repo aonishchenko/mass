@@ -26,6 +26,17 @@
     "ZG_DRAFT_MODEL": "qwen2.5-omni",
     "ZG_CANONICAL_MODEL": "qwen2.5-omni",
     "ZG_STORAGE_RPC": "https://evmrpc-testnet.0g.ai",
-    "ZG_STORAGE_INDEXER": "https://indexer-storage-testnet-turbo.0g.ai"
+    "ZG_STORAGE_INDEXER": "https://indexer-storage-testnet-turbo.0g.ai",
+
+    // World (M3) — server-side proof verification. See docs/WORLD-SETUP.md.
+    // app_id + rp_id are filled once the Developer Portal app exists. Blank keeps
+    // verification "not configured" (the UI says so). WORLD_RP_PRIVATE_KEY is a
+    // SECRET (wrangler secret put), as is WORLD_DEV_FALLBACK if used for rehearsal.
+    "WORLD_APP_ID": "",
+    "WORLD_RP_ID": "",
+    "WORLD_ENV": "staging",
+    "WORLD_ACTION_SELFIE": "mass-selfie",
+    "WORLD_ACTION_AGENTKIT": "mass-agentkit",
+    "WORLD_SYBIL_THRESHOLD": "0.5"
   }
 }

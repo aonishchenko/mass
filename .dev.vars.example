@@ -23,8 +23,35 @@ ZG_SEALED=
 ZG_PRIVATE_KEY=
 
 # First-party encryption secret for brain + archive. Any high-entropy string.
-# Plaintext never reaches the 0G network.
+# Plaintext never reaches the 0G network. ALSO signs the short-lived World
+# verification tokens (src/world/verify.ts), so it must be set for seat claims.
 SESSION_KEY=
+
+# --- World (M3): server-side proof verification. See docs/WORLD-SETUP.md ---
+#
+# app_id + rp_id from the World Developer Portal. Public (they may instead live
+# in wrangler.jsonc vars). Leave blank to run WITHOUT World (see DEV fallback).
+WORLD_APP_ID=
+WORLD_RP_ID=
+
+# The RP ECDSA signing key (hex) used to sign rp_context. SECRET. From the
+# Developer Portal's RP signing key. Required for the real IDKit flow.
+WORLD_RP_PRIVATE_KEY=
+
+# Action ids gating each proof (must match the actions created in the portal).
+WORLD_ACTION_SELFIE=mass-selfie
+WORLD_ACTION_AGENTKIT=mass-agentkit
+
+# production | staging | sandbox. Match your app's environment.
+WORLD_ENV=staging
+
+# Sybil score (0–1) below which a seat is granted Observer only. Default 0.5.
+WORLD_SYBIL_THRESHOLD=0.5
+
+# "1" lets the app run WITHOUT World credentials so the crew can rehearse the
+# full arc. Proofs are NOT verified against World and the UI shows a DEV MODE
+# banner. NEVER set this in a judged/production deployment.
+WORLD_DEV_FALLBACK=1
 
 # ---- Hedera (hedera-spec.md §3) ----
 # From https://portal.hedera.com/dashboard (Testnet).

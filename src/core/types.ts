@@ -92,7 +92,23 @@ export interface SeatClaimedPayload {
 export interface SelfieOkPayload {
   seat: string;
   sybilScore: number;
-  attestationHash: string;
+  /** World nullifier for this Selfie proof (audit only; no PII). */
+  nullifierHash: string;
+  /** Tier this proof grants: T2 if sybilScore >= threshold, else T1 (Observer). */
+  grantedTier: Tier;
+  /** Threshold applied — lets the UI explain an Observer downgrade. */
+  threshold: number;
+  /** True when issued by the DEV fallback (NOT verified against World). */
+  dev?: boolean;
+}
+
+export interface AgentKitOkPayload {
+  seat: string;
+  /** AgentKit / Orb delegation reference (the proof's nullifier). */
+  proofRef: string;
+  /** Anonymous human principal backing the delegation to the session agent. */
+  principal: string;
+  dev?: boolean;
 }
 
 export interface ContinuityOkPayload {
@@ -222,7 +238,18 @@ export interface BrainDoc {
 // ---------------------------------------------------------------------------
 
 export type Intent =
-  | { kind: "claimSeat"; name: string }
+  /**
+   * Claim a seat. `selfieToken` is a server-issued, HMAC-signed proof that a
+   * Selfie Check was verified SERVER-SIDE (see src/world/verify.ts). The DO
+   * rejects a claim without a valid token — a client can never self-assert
+   * verification.
+   */
+  | { kind: "claimSeat"; name: string; selfieToken: string }
+  /**
+   * Delegate to the session agent as a Signer. `agentkitToken` is a
+   * server-verified Orb / AgentKit proof. Requires an existing Builder seat.
+   */
+  | { kind: "delegate"; agentkitToken: string }
   /** Re-attach to an existing seat after a reload, using the seat's token. */
   | { kind: "resumeSeat"; token: string }
   | { kind: "instruct"; text: string; lane: Lane }
@@ -282,6 +309,14 @@ export interface Seat {
   tier: Tier;
   present: boolean;
   sybilScore?: number;
+  /** World nullifier of the Selfie proof (audit; opaque, no PII). */
+  nullifierHash?: string;
+  /** AgentKit / Orb delegation reference, set when the seat becomes a Signer. */
+  proofRef?: string;
+  /** When this seat's identity was last verified (ms). */
+  verifiedAt?: number;
+  /** Continuity re-verification timestamp (§B2.5). */
+  lastContinuityAt?: number;
 }
 
 export type ContribState =

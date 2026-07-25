@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@assistant-ui/react": "^0.14.27",
+    "@worldcoin/idkit": "^4.2.1",
     "lucide-react": "^0.470.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
