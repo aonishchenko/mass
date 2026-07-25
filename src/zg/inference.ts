@@ -69,17 +69,38 @@ export function citationSystemPrompt(chunks: BrainChunk[]): Msg {
     role: "system",
     content:
       "You are a team member built by a crew of humans.\n\nYOUR BRAIN:\n" +
-      (brain || "(empty — say so if asked what you know)") +
-      "\n\nRULE: when your answer uses information from a brain chunk, you MUST " +
+      (brain || "(empty)") +
+      "\n\nRULE 1: answer ONLY from the brain above. If the answer is not in it, " +
+      `reply with exactly this and nothing else:\n"${UNTAUGHT}"\n` +
+      "Never answer from your own training data. Never pad with generic advice. " +
+      "Never mention your training cutoff.\n" +
+      "RULE 2: when your answer uses information from a brain chunk, you MUST " +
       "write the citation immediately after that information, in the form " +
       `${example} — copying the exact name and number from that chunk's ` +
-      "brackets. Never cite a name or number not listed above. If you use no " +
-      "brain chunk, add no citation.",
+      "brackets. Never cite a name or number not listed above.\n" +
+      "RULE 3: be brief. Answer in a few sentences unless asked for more.",
   };
 }
 
+/**
+ * The exact refusal. The UI matches on this string to offer "Teach it now", so
+ * it is a contract between the prompt and the client — change both together.
+ *
+ * This sentence is also the product's whole argument in one line: the agent
+ * knows what this crew taught it, and nothing else.
+ */
+export const UNTAUGHT =
+  "I haven't been taught that yet. Teach me and I'll know it next time.";
+
+/**
+ * Capped on purpose. Uncapped, the model answered a simple question with a
+ * ~500-word generic essay that filled the screen and buried the citation —
+ * which is the one thing the demo exists to show.
+ */
+const MAX_TOKENS = 500;
+
 const bodyFor = (model: string, messages: Msg[], stream: boolean) =>
-  JSON.stringify({ model, messages, stream });
+  JSON.stringify({ model, messages, stream, max_tokens: MAX_TOKENS });
 
 /**
  * Streams tokens through `onToken` and resolves with the full text.
@@ -106,7 +127,11 @@ export async function runInference(
   }
 
   const model = lane === "canonical" ? env.ZG_CANONICAL_MODEL : env.ZG_DRAFT_MODEL;
-  const full = lane === "canonical" ? [citationSystemPrompt(brainChunks), ...messages] : messages;
+  // BOTH lanes answer from the brain only. An agent that answers from its
+  // training data in quick mode and from the crew's knowledge in careful mode
+  // is two different colleagues, and the refuse-teach-answer beat only works if
+  // "I haven't been taught that" can happen in the mode people actually use.
+  const full = [citationSystemPrompt(brainChunks), ...messages];
 
   const res = await fetch(`${env.ZG_ROUTER_URL}/chat/completions`, {
     method: "POST",
