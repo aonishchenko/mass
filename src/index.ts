@@ -42,22 +42,43 @@ export default {
       }
     }
 
-    /** Success metrics — hedera-spec §8. Counted from the network, not locally. */
+    /**
+     * Success metrics — hedera-spec §8.
+     *
+     * HONESTY RULE: every number here is either counted from the network or
+     * folded from the session log. A counter that is not wired yet is OMITTED,
+     * never reported as 0 — a fabricated zero is still a fabricated number, and
+     * we quote these at the booth.
+     */
     if (url.pathname === "/api/stats") {
-      const stats = {
+      const stats: Record<string, unknown> = {
         network: "testnet",
         topicId: env.HEDERA_TOPIC_ID ?? null,
         treasuryAccountId: env.HEDERA_OPERATOR_ID ?? null,
         capTableTokenId: env.HEDERA_CAPTABLE_TOKEN_ID ?? null,
-        hcsMessages: 0,
-        treasuryBalanceHbar: 0,
-        accountsCreated: 0,
-        transactions: 0,
-        payouts: 0,
-        distinctHumansPaid: 0,
-        totalHbarDistributed: 0,
       };
 
+      // Session-derived facts (the log is the source).
+      const session = url.searchParams.get("session");
+      if (session) {
+        try {
+          const res = await env.SESSION.getByName(session).fetch(
+            new Request(`https://do/state?session=${encodeURIComponent(session)}`)
+          );
+          const s = (await res.json()) as {
+            contributionsAccepted?: number;
+            citationsServed?: number;
+          };
+          if (typeof s.contributionsAccepted === "number") {
+            stats.contributionsAccepted = s.contributionsAccepted;
+          }
+          if (typeof s.citationsServed === "number") stats.citationsServed = s.citationsServed;
+        } catch {
+          // A missing session simply contributes no numbers.
+        }
+      }
+
+      // Network-counted facts.
       try {
         if (env.HEDERA_TOPIC_ID) {
           stats.hcsMessages = await topicMessageCount(env.HEDERA_TOPIC_ID);
@@ -69,6 +90,8 @@ export default {
         return Response.json({ ...stats, error: String(err).slice(0, 200) }, { status: 502 });
       }
 
+      // Deliberately absent until the payout path is wired: payouts,
+      // distinctHumansPaid, totalHbarDistributed, accountsCreated.
       return Response.json(stats);
     }
 

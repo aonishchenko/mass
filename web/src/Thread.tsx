@@ -11,16 +11,21 @@ import {
   useMessage,
 } from "@assistant-ui/react";
 import { ArrowUpIcon, ShieldCheckIcon, SproutIcon, ZapIcon } from "lucide-react";
-import type { FC } from "react";
+import type { FC, ReactNode } from "react";
+import Markdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import type { Lane, SessionView } from "./session";
+
+const CITATION = /(\(per [^)]*'s contribution #\d+\))/g;
+const IS_CITATION = /^\(per .*'s contribution #\d+\)$/;
 
 /** Highlights (per <name>'s contribution #<n>) so the claim is visible. */
 export const CitedText: FC<{ text: string }> = ({ text }) => {
-  const parts = text.split(/(\(per [^)]*'s contribution #\d+\))/g);
+  const parts = text.split(CITATION);
   return (
     <>
       {parts.map((p, i) =>
-        /^\(per .*'s contribution #\d+\)$/.test(p) ? (
+        IS_CITATION.test(p) ? (
           <span key={i} className="citation" title="cited from the agent's brain">
             {p}
           </span>
@@ -31,6 +36,53 @@ export const CitedText: FC<{ text: string }> = ({ text }) => {
     </>
   );
 };
+
+/**
+ * Citations arrive inside prose, so highlighting has to happen at the text-node
+ * level — after markdown has produced the element tree, not before it.
+ */
+const highlight = (node: ReactNode): ReactNode => {
+  if (typeof node === "string") return <CitedText text={node} />;
+  if (Array.isArray(node)) return node.map((n, i) => <span key={i}>{highlight(n)}</span>);
+  return node;
+};
+
+/**
+ * The model answers in markdown. Rendering it as plain text put literal `####`
+ * and `**bold**` on screen across the whole conversation pane, which made
+ * correct answers look broken.
+ */
+export const AgentMarkdown: FC<{ text: string }> = ({ text }) => (
+  <Markdown
+    remarkPlugins={[remarkGfm]}
+    components={{
+      p: ({ children }) => <p className="pb-3 last:pb-0">{highlight(children)}</p>,
+      li: ({ children }) => <li className="pb-1">{highlight(children)}</li>,
+      ul: ({ children }) => <ul className="list-disc pb-3 pl-5 last:pb-0">{children}</ul>,
+      ol: ({ children }) => <ol className="list-decimal pb-3 pl-5 last:pb-0">{children}</ol>,
+      h1: ({ children }) => <h3 className="pb-2 text-[17px] font-semibold">{children}</h3>,
+      h2: ({ children }) => <h3 className="pb-2 text-[16px] font-semibold">{children}</h3>,
+      h3: ({ children }) => <h4 className="pb-1.5 text-[15px] font-semibold">{children}</h4>,
+      h4: ({ children }) => <h4 className="pb-1.5 text-[15px] font-semibold">{children}</h4>,
+      strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+      code: ({ children }) => (
+        <code className="rounded bg-[#1a1a18]/6 px-1 py-0.5 font-mono text-[13px]">{children}</code>
+      ),
+      pre: ({ children }) => (
+        <pre className="mb-3 overflow-x-auto rounded-lg bg-[#1a1a18]/5 p-3 font-mono text-[12.5px]">
+          {children}
+        </pre>
+      ),
+      a: ({ href, children }) => (
+        <a href={href} target="_blank" rel="noreferrer" className="underline">
+          {children}
+        </a>
+      ),
+    }}
+  >
+    {text}
+  </Markdown>
+);
 
 /** Reads the hovered message's own text out of assistant-ui's message context. */
 const TeachThisButton: FC<{ onTeach: (text: string) => void }> = ({ onTeach }) => {
@@ -78,20 +130,46 @@ const UserMessage: FC<{ onTeach: (text: string) => void; canTeach: boolean }> = 
   </MessagePrimitive.Root>
 );
 
-const AssistantMessage: FC<{ view: SessionView }> = ({ view }) => (
-  <MessagePrimitive.Root className="mx-auto w-full max-w-3xl px-4 py-3">
-    <div className="text-[15px] leading-relaxed whitespace-pre-wrap">
-      <MessagePrimitive.Parts
-        components={{
-          Text: ({ text }) => <CitedText text={text} />,
-        }}
-      />
-    </div>
-    {!view.brainRoot && view.brainPending && (
-      <p className="pt-2 text-xs text-[var(--color-faint)]">brain write pending…</p>
-    )}
-  </MessagePrimitive.Root>
+/** Must match UNTAUGHT in src/zg/inference.ts — the prompt and the UI agree. */
+const UNTAUGHT_MARKER = "haven't been taught that yet";
+
+/**
+ * The refusal is the pitch. When the agent says it has not been taught
+ * something, the next thing on screen is the way to teach it — refuse, teach,
+ * answer with a citation is the whole demo in three clicks.
+ */
+const TeachItNow: FC<{ onFocusTeach: () => void }> = ({ onFocusTeach }) => (
+  <button
+    onClick={onFocusTeach}
+    className="mt-3 flex items-center gap-1.5 rounded-lg bg-[var(--color-accent)] px-3 py-1.5 text-[13px] text-white transition-opacity hover:opacity-85"
+  >
+    <SproutIcon size={13} /> Teach it now
+  </button>
 );
+
+const AssistantMessage: FC<{ view: SessionView; onFocusTeach: () => void }> = ({
+  view,
+  onFocusTeach,
+}) => {
+  const text = useMessage((m) =>
+    m.content.map((p) => (p.type === "text" ? p.text : "")).join("")
+  );
+  const untaught = text.includes(UNTAUGHT_MARKER);
+
+  return (
+    <MessagePrimitive.Root className="mx-auto w-full max-w-3xl px-4 py-3">
+      <div className="text-[15px] leading-relaxed">
+        <MessagePrimitive.Parts
+          components={{ Text: ({ text }) => <AgentMarkdown text={text} /> }}
+        />
+      </div>
+      {untaught && <TeachItNow onFocusTeach={onFocusTeach} />}
+      {!view.brainRoot && view.brainPending && (
+        <p className="pt-2 text-xs text-[var(--color-faint)]">saving the brain…</p>
+      )}
+    </MessagePrimitive.Root>
+  );
+};
 
 const LaneToggle: FC<{ lane: Lane; setLane: (l: Lane) => void; canCommit: boolean }> = ({
   lane,
@@ -108,20 +186,24 @@ const LaneToggle: FC<{ lane: Lane; setLane: (l: Lane) => void; canCommit: boolea
           : "text-[var(--color-faint)] hover:bg-[#1a1a18]/5"
       }`}
     >
-      <ZapIcon size={13} /> draft
+      <ZapIcon size={13} /> quick mode
     </button>
     <button
       type="button"
       onClick={() => canCommit && setLane("canonical")}
       disabled={!canCommit}
-      title={canCommit ? "sealed, attested, cites teachers" : "needs 2 signers present"}
+      title={
+        canCommit
+          ? "Runs in a sealed enclave, pays per answer, and cites its teachers"
+          : "Needs 2 signers present"
+      }
       className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs transition-colors ${
         lane === "canonical"
           ? "bg-[var(--color-accent)]/15 text-[var(--color-accent)]"
           : "text-[var(--color-faint)] hover:bg-[#1a1a18]/5"
       } ${!canCommit ? "cursor-not-allowed opacity-40" : ""}`}
     >
-      <ShieldCheckIcon size={13} /> canonical
+      <ShieldCheckIcon size={13} /> careful mode
     </button>
   </div>
 );
@@ -133,7 +215,16 @@ export const Thread: FC<{
   canCommit: boolean;
   seated: boolean;
   onTeach: (text: string) => void;
-}> = ({ view, lane, setLane, canCommit, seated, onTeach }) => (
+}> = ({ view, lane, setLane, canCommit, seated, onTeach }) => {
+  // "Teach it now" points at the one input there is: focus it and let them type
+  // the thing the agent just admitted it does not know.
+  const focusComposer = () => {
+    const el = document.querySelector<HTMLTextAreaElement>(".aui-composer-input, textarea");
+    el?.focus();
+    el?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  };
+
+  return (
   <ThreadPrimitive.Root className="flex h-full flex-col bg-[var(--color-cream)] font-serif text-[var(--color-ink)]">
     <ThreadPrimitive.Viewport className="flex grow flex-col overflow-y-auto pt-10">
       <ThreadPrimitive.Empty>
@@ -155,14 +246,24 @@ export const Thread: FC<{
           UserMessage: () => (
             <UserMessage onTeach={onTeach} canTeach={seated && !view.closed} />
           ),
-          AssistantMessage: () => <AssistantMessage view={view} />,
+          AssistantMessage: () => (
+            <AssistantMessage view={view} onFocusTeach={focusComposer} />
+          ),
         }}
       />
 
       <div className="sticky bottom-0 mx-auto mt-auto w-full max-w-3xl bg-gradient-to-b from-transparent via-[var(--color-cream)]/85 to-[var(--color-cream)] px-4 pt-4 pb-3">
+        {/* Working thing first, explanation second: a new arrival gets one
+            concrete thing to try, not a lecture about ownership. */}
+        {seated && view.turns.length === 0 && (
+          <p className="pb-2 text-center text-xs text-[var(--color-muted)]">
+            Try: <em>“Review this getting-started page”</em> — or ask it something it
+            doesn’t know yet.
+          </p>
+        )}
         {lane === "canonical" && (
           <p className="pb-2 text-center text-xs text-[var(--color-accent)]">
-            Canonical lane — sealed run, paid per inference, answer cites its teachers.
+            Careful mode — sealed run, paid per answer, cites its teachers.
           </p>
         )}
         <ComposerPrimitive.Root className="rounded-2xl border border-[#1a1a18]/12 bg-white/60 p-2.5 shadow-sm">
@@ -199,4 +300,5 @@ export const Thread: FC<{
       </div>
     </ThreadPrimitive.Viewport>
   </ThreadPrimitive.Root>
-);
+  );
+};

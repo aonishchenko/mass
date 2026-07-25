@@ -159,6 +159,7 @@ export class SessionRoom extends DurableObject<Env> {
         brainChunks: this.session.brainChunks,
         brainRoot: this.session.brainRoot,
         eventCount: this.session.events.length,
+        ...this.sessionCounters(),
       });
     }
 
@@ -344,6 +345,26 @@ export class SessionRoom extends DurableObject<Env> {
   private async bootstrap(sessionId: string) {
     this.session = { ...this.session, sessionId };
     await this.emit("session.created", { sessionId }, { system: true });
+  }
+
+  /**
+   * Counters we can state as fact, derived from the log — never estimated.
+   * Anything not actually wired (payouts, distinct humans paid) is deliberately
+   * absent rather than reported as zero: we quote these at the booth.
+   */
+  private sessionCounters() {
+    const CITATION = /\(per [^)]*'s contribution #\d+\)/g;
+    let citationsServed = 0;
+    let contributionsAccepted = 0;
+
+    for (const e of this.session.events) {
+      if (e.type === "contrib.accepted") contributionsAccepted++;
+      if (e.type === "canonical.completed" || e.type === "draft.completed") {
+        const text = (e.payload as { text?: string })?.text ?? "";
+        citationsServed += text.match(CITATION)?.length ?? 0;
+      }
+    }
+    return { contributionsAccepted, citationsServed };
   }
 
   private async recomputePerms() {

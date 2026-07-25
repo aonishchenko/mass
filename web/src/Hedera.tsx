@@ -34,27 +34,35 @@ interface Stats {
   topicId: string | null;
   treasuryAccountId: string | null;
   capTableTokenId: string | null;
-  hcsMessages: number;
-  treasuryBalanceHbar: number;
+  hcsMessages?: number;
+  treasuryBalanceHbar?: number;
+  /** Session-derived, present only when a session is supplied. */
+  contributionsAccepted?: number;
+  citationsServed?: number;
 }
 
 const consensusToLocal = (ts: string) =>
   new Date(Number(ts.split(".")[0]) * 1000).toLocaleTimeString();
 
-export const HederaPanel: FC<{ eventCount: number }> = ({ eventCount }) => {
+export const HederaPanel: FC<{ eventCount: number; anchorable: number }> = ({
+  eventCount,
+  anchorable,
+}) => {
   const [hcs, setHcs] = useState<HcsResponse | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
   const shown = useVisible(10);
+  const sessionId = new URLSearchParams(location.search).get("session") ?? "default";
 
-  // Re-poll when the local log grows: consensus lags a second or two, so an
-  // anchor appears here shortly AFTER the event shows in the session log.
+  // Poll continuously while mounted. Consensus lands a second or two after the
+  // local event, and firing only twice per event left the panel showing stale
+  // numbers during exactly the quiet moment a judge reads it.
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
       try {
         const [h, s] = await Promise.all([
           fetch("/api/hcs").then((r) => r.json()),
-          fetch("/api/stats").then((r) => r.json()),
+          fetch(`/api/stats?session=${encodeURIComponent(sessionId)}`).then((r) => r.json()),
         ]);
         if (!cancelled) {
           setHcs(h);
@@ -65,16 +73,31 @@ export const HederaPanel: FC<{ eventCount: number }> = ({ eventCount }) => {
       }
     };
     load();
-    const t = setTimeout(load, 4000);
+    const t = setInterval(load, 5000);
     return () => {
       cancelled = true;
-      clearTimeout(t);
+      clearInterval(t);
     };
-  }, [eventCount]);
+  }, [sessionId, eventCount]);
 
   if (!hcs?.configured) return null;
 
-  const pending = Math.max(0, eventCount - (stats?.hcsMessages ?? 0));
+  // Only ANCHORABLE events can ever reach the topic. Comparing against the full
+  // event count made the counter permanently large and always climbing, which
+  // read as a broken pipeline.
+  const pending = Math.max(0, anchorable - (stats?.hcsMessages ?? 0));
+
+  // Built by omission, not by defaulting: a counter that is not wired
+  // contributes no phrase at all rather than an invented "0".
+  const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+  const strip = [
+    stats?.contributionsAccepted !== undefined &&
+      plural(stats.contributionsAccepted, "thing taught", "things taught"),
+    stats?.citationsServed !== undefined &&
+      plural(stats.citationsServed, "answer cited", "answers cited"),
+    stats?.hcsMessages !== undefined &&
+      plural(stats.hcsMessages, "on-chain record", "on-chain records"),
+  ].filter((s): s is string => typeof s === "string");
 
   return (
     <section className="border-b border-[#1a1a18]/8 px-4 py-3">
@@ -86,6 +109,15 @@ export const HederaPanel: FC<{ eventCount: number }> = ({ eventCount }) => {
         Read live from Hedera's Mirror Node — not from this browser. Only hashes
         are published; the conversation itself never leaves 0G.
       </p>
+
+      {/* Plain-language strip. Every number here is counted — from the network
+          or from the session log. Anything not yet wired is OMITTED, never
+          shown as zero: these get quoted at the booth. */}
+      {strip.length > 0 && (
+        <p className="pb-2 text-[11.5px] leading-snug text-[var(--color-ink)]">
+          {strip.join(" · ")}
+        </p>
+      )}
 
       <dl className="space-y-1 pb-2 text-[11.5px]">
         <div className="flex justify-between gap-2">
@@ -115,7 +147,7 @@ export const HederaPanel: FC<{ eventCount: number }> = ({ eventCount }) => {
                 rel="noreferrer"
                 className="inline-flex items-center gap-1 font-mono text-[var(--color-accent)] hover:underline"
               >
-                {stats.treasuryBalanceHbar.toFixed(2)} ℏ <ExternalLinkIcon size={10} />
+                {(stats.treasuryBalanceHbar ?? 0).toFixed(2)} ℏ <ExternalLinkIcon size={10} />
               </a>
             </dd>
           </div>
