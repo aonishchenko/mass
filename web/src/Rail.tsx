@@ -228,7 +228,9 @@ export const Rail: FC<{ view: SessionView; send: (i: Intent) => void }> = ({ vie
                   </li>
                 ))}
               {view.candidates.length === 0 && (
-                <li className="text-[var(--color-faint)]">nothing said yet to review</li>
+                <li className="text-[var(--color-faint)]">
+                  nothing new said since the last harvest
+                </li>
               )}
             </ul>
             <div className="flex gap-2 pt-2">
@@ -284,7 +286,7 @@ export const Rail: FC<{ view: SessionView; send: (i: Intent) => void }> = ({ vie
               <p className="pt-1 text-center text-[11px] text-[var(--color-muted)]">
                 {!seated
                   ? "claim a seat first"
-                  : "finish or cancel the harvest above first"}
+                  : "reviewing above — the session closes itself when you finish"}
               </p>
             )}
           </>

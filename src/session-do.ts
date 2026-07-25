@@ -57,6 +57,8 @@ export class SessionRoom extends DurableObject<Env> {
   private candidates: Candidate[] = [];
   /** Single write queue — storage never blocks acceptance (§8.2). */
   private brainQueue: Promise<void> = Promise.resolve();
+  /** Seat that asked to close, waiting on an auto-opened harvest to resolve. */
+  private pendingClose: Seat | null = null;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -119,6 +121,7 @@ export class SessionRoom extends DurableObject<Env> {
     pair[1].send(
       JSON.stringify({ t: "sync", events: this.session.events, you: null } satisfies Frame)
     );
+    await this.sendCandidates(pair[1]);
 
     return new Response(null, { status: 101, webSocket: pair[0] });
   }
@@ -153,6 +156,18 @@ export class SessionRoom extends DurableObject<Env> {
   async webSocketClose(ws: WebSocket) {
     const meta = (ws.deserializeAttachment() ?? { seat: null }) as SocketMeta;
     if (!meta.seat) return;
+
+    // A refresh closes the old socket AFTER the new one has already resumed the
+    // seat, and a second tab holds the same seat legitimately. Emitting
+    // seat.left unconditionally marked a present human absent, which silently
+    // dropped signer quorum and blocked co-signing.
+    const stillHere = this.ctx.getWebSockets().some((other) => {
+      if (other === ws) return false;
+      const m = (other.deserializeAttachment() ?? { seat: null }) as SocketMeta;
+      return m.seat === meta.seat;
+    });
+    if (stillHere) return;
+
     await this.emit("seat.left", { seat: meta.seat }, { system: true });
     await this.recomputePerms();
   }
@@ -257,8 +272,16 @@ export class SessionRoom extends DurableObject<Env> {
         return this.keepCandidate(intent.harvestId, intent.candidateId, intent.text, seat!);
       case "cosignBatch":
         return this.cosignBatch(intent.harvestId, seat!);
-      case "cancelHarvest":
-        return this.emit("harvest.cancelled", { harvestId: intent.harvestId }, { seat: seat!.seat, tier: seat!.tier });
+      case "cancelHarvest": {
+        await this.emit(
+          "harvest.cancelled",
+          { harvestId: intent.harvestId },
+          { seat: seat!.seat, tier: seat!.tier }
+        );
+        // Cancelling the review is not cancelling the close — the crew already
+        // asked to close, and chose to bank nothing.
+        return this.finishPendingClose();
+      }
       case "closeSession":
         return this.closeSession(seat!);
     }
@@ -287,6 +310,7 @@ export class SessionRoom extends DurableObject<Env> {
     // Private to this socket — never broadcast.
     ws.send(JSON.stringify({ t: "seated", seat: seatId, token } satisfies Frame));
     ws.send(JSON.stringify({ t: "sync", events: this.session.events, you: seatId } satisfies Frame));
+    await this.sendCandidates(ws);
     await this.recomputePerms();
   }
 
@@ -309,6 +333,7 @@ export class SessionRoom extends DurableObject<Env> {
     ws.serializeAttachment({ seat: row.seat } satisfies SocketMeta);
     ws.send(JSON.stringify({ t: "seated", seat: row.seat, token } satisfies Frame));
     ws.send(JSON.stringify({ t: "sync", events: this.session.events, you: row.seat } satisfies Frame));
+    await this.sendCandidates(ws);
     await this.emit("seat.rejoined", { seat: row.seat }, { system: true });
     await this.recomputePerms();
   }
@@ -457,10 +482,12 @@ export class SessionRoom extends DurableObject<Env> {
   // Harvest (§7.5)
   // -------------------------------------------------------------------------
 
-  private async openHarvest(seat: Seat) {
-    const harvestId = newId("h");
-    const sinceSeq = this.session.lastHarvestedSeq;
-
+  /**
+   * Rebuildable from the log on purpose: candidates used to be broadcast once
+   * and held only in memory, so a refresh — or a DO eviction — left an open
+   * harvest showing "nothing to review" and blocked closing the session.
+   */
+  private async buildCandidates(sinceSeq: number): Promise<Candidate[]> {
     // §7.5.3: candidates come from human `instruct` text ONLY, never agent answers.
     const humanLines = this.session.events
       .filter((e) => e.type === "instruct" && e.seq > sinceSeq && "seat" in e.actor)
@@ -483,7 +510,7 @@ export class SessionRoom extends DurableObject<Env> {
       }
     }
 
-    this.candidates = humanLines.map((p) => {
+    return humanLines.map((p) => {
       const rewritten = suggestions.get(p.eventId);
       return {
         candidateId: newId("cand"),
@@ -494,6 +521,12 @@ export class SessionRoom extends DurableObject<Env> {
         suggested: rewritten !== undefined,
       };
     });
+  }
+
+  private async openHarvest(seat: Seat): Promise<number> {
+    const harvestId = newId("h");
+    const sinceSeq = this.session.lastHarvestedSeq;
+    this.candidates = await this.buildCandidates(sinceSeq);
 
     await this.emit(
       "harvest.opened",
@@ -501,6 +534,23 @@ export class SessionRoom extends DurableObject<Env> {
       { seat: seat.seat, tier: seat.tier }
     );
     this.broadcast({ t: "candidates", harvestId, candidates: this.candidates });
+    return this.candidates.length;
+  }
+
+  /** Give a (re)connecting client the open harvest's candidates. */
+  private async sendCandidates(ws: WebSocket) {
+    const h = this.session.harvest;
+    if (!h?.open) return;
+    if (this.candidates.length === 0) {
+      this.candidates = await this.buildCandidates(h.sinceSeq);
+    }
+    ws.send(
+      JSON.stringify({
+        t: "candidates",
+        harvestId: h.harvestId,
+        candidates: this.candidates,
+      } satisfies Frame)
+    );
   }
 
   private async keepCandidate(harvestId: string, candidateId: string, text: string, seat: Seat) {
@@ -566,7 +616,16 @@ export class SessionRoom extends DurableObject<Env> {
         { seat: seat.seat, tier: seat.tier }
       );
       this.candidates = [];
+      await this.finishPendingClose();
     }
+  }
+
+  /** Completes a close that was interrupted to run the review. */
+  private async finishPendingClose() {
+    const seat = this.pendingClose;
+    if (!seat || this.session.harvest?.open || this.session.closed) return;
+    this.pendingClose = null;
+    await this.closeSession(seat);
   }
 
   // -------------------------------------------------------------------------
@@ -584,17 +643,27 @@ export class SessionRoom extends DurableObject<Env> {
   }
 
   private async closeSession(seat: Seat) {
-    // §7.5.1: harvest is auto-offered at close. Most people never click a
-    // "review" button on their own — they just talk, and the teachable moments
-    // sit in the transcript unclaimed. Offer the review instead of closing;
-    // closing again after the harvest resolves goes through.
+    // §7.5.1: harvest is auto-offered at close. Closing is ONE action from the
+    // crew's point of view — it opens the review, and finishes itself once the
+    // review resolves (see finishPendingClose). Making them press Close twice
+    // was busywork.
     if (!this.session.harvest?.open && this.unharvestedCount() > 0) {
-      await this.openHarvest(seat);
-      throw new Error(
-        "Before closing: keep anything worth teaching, then close again."
+      const found = await this.openHarvest(seat);
+      if (found > 0) {
+        this.pendingClose = seat;
+        throw new Error(
+          "Before closing: keep anything worth teaching. The session closes itself once you co-sign or cancel."
+        );
+      }
+      // Nothing to review — do not strand the crew behind an empty harvest.
+      await this.emit(
+        "harvest.cancelled",
+        { harvestId: this.session.harvest!.harvestId },
+        { system: true }
       );
     }
 
+    this.pendingClose = null;
     await this.brainQueue; // let pending brain writes land before sealing
     try {
       const rootHash = await writeArchive(this.env, this.session.events);
