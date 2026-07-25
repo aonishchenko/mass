@@ -1,7 +1,7 @@
 # MASS — Multiplayer Agent Session System
 ## Spec v0.6 — FINAL PRE-BUILD EDITION
 **Sat-ready. Demo Sunday 09:00 WEST. TWO booth pitches Sunday AM: ENS + Hedera (in person).**
-**This file is the single source of truth. Companion files: TASKBOARD.md (daily execution), world-testing-template.md (World deliverable), SUBMISSION-PACK.md (README/demo/booth/checklists).**
+**This file is the single source of truth. Companion files: TASKBOARD.md (daily execution), shared-session-spec.md (session core / lanes / contribution lifecycle — M0+M2+M6 detail), world-testing-template.md (World deliverable), SUBMISSION-PACK.md (README/demo/booth/checklists).**
 
 ---
 
@@ -99,6 +99,11 @@ live ENS resolution, deployed URL.
 
 # PART C — INTERFACE CONTRACTS (frozen; changing = both agree)
 
+> Payload shapes, the Intent/Event/delta split, replay determinism rules and
+> additive schema extensions live in **[shared-session-spec.md](./shared-session-spec.md) §3, §4, §9**.
+> That file may ADD to C1–C4; it may never remove or rename. One open rename
+> decision (`draft.*`/`canonical.*` → `run.*`) sits in its §9.1 — resolve before M0.
+
 ## C1. Event schema (the spine)
 ```ts
 type Tier = "T1" | "T2" | "T3";
@@ -153,9 +158,10 @@ interface InferenceProvider {
   sealed: boolean;
   getAttestation?(responseId: string): Promise<AttestationRef | null>;
 }
-// lane="draft" → fastest non-sealed; lane="canonical" → sealed or throws
-// SealedUnavailable → UI honesty banner (exact copy in SUBMISSION-PACK).
 ```
+Lane semantics — what each lane may touch, payment, attestation, why canonical
+throws rather than downgrades: **shared-session-spec §6**. Honesty banner copy:
+SUBMISSION-PACK.
 
 ## C4. Worker interfaces (each ships src/<module>/mock.ts: deterministic, 300ms, logged)
 ```ts
@@ -190,11 +196,17 @@ delegateUser(tokenId, address): Promise<void>
 
 # PART D — MODULE CARDS (execution detail in TASKBOARD.md)
 
+> **M0 + M2 + M6 form one vertical slice — "Session Room v0" — owned by
+> [shared-session-spec.md](./shared-session-spec.md).** Their cards below carry
+> only what other modules must know; build order, DoD and all internals live in
+> that file. M1/M3/M4/M5/M7/M8 remain owned here.
+
 ### M0 CORE (pair, tonight ~90m) — blocks all
-Repo, types (C1-C4), WS event bus, in-memory session state, authority engine
-as pure `computePerms(crew)` w/ 5 unit tests (incl. last-T3-leaves →
+Repo, types (C1-C4), WS transport, session state, and the authority engine as
+pure `computePerms(crew)` implementing A4 (incl. last-T3-leaves →
 complete-then-lock; challenge state transition).
-DoD: two browser tabs share one mocked event stream; tests green.
+**Owned by shared-session-spec §2-§4** — protocol, replay, determinism rules.
+DoD: that file §11.
 
 ### M1 UI COCKPIT (T shell, N copy) — needs M0
 Stream pane, log ticker (renders ONLY from MassEvents), seat badges
@@ -205,11 +217,11 @@ availability, cap table — zero hex anywhere).
 DoD (mocks): full arc clickable start→Birth→First Job with fake data.
 
 ### M2 INFERENCE ROUTER (T) — needs M0
-One adapter, three base URLs. Tonight: curl 0G PC (TG promo key), record
-`[0G LATENCY: ____ tok/s | sealed models: ____]` here. Attestation fetch per
-booth answer. Citation system-prompt wired into canonical lane (C2).
-DoD: draft lane streams in UI; canonical lane returns attestationRef
-(real or mock per latency outcome).
+Tonight (KILL-OR-CONTINUE): curl 0G PC (TG promo key), record
+`[0G LATENCY: ____ tok/s | sealed models: ____]` in Part F. Attestation surface
+per booth answer.
+**Owned by shared-session-spec §6, §8.3** — adapter, both lanes, citation prompt,
+Router-vs-direct-broker migration. DoD: that file §11.
 
 ### M3 WORLD (N) — needs M0
 Selfie on seat claim → SERVER-SIDE VERIFY (hard gate) → sybil score into
@@ -240,12 +252,13 @@ B3.2 stretch: verifyEnsip25 loop. Grep-for-hex check before freeze.
 DoD: fresh wallet resolves seat + agent profile live; demo shows zero hex.
 
 ### M6 0G BRAIN + IDENTITY (T) — needs M2
-Log storage uploader/downloader, first-party encryption, PINNED SDK versions
-(old flow-contract tutorials are wrong). writeBrain(BrainChunk[]) on each
-acceptance → rootHash → event → M5 record. screenContribution (B2.2) before
-acceptance, verdict logged. mintAgenticId at close + delegateUser per T3.
-DoD: brain round-trips; citations resolve to real chunks; Agentic ID on
-explorer with >=2 delegated users.
+PINNED SDK versions (old flow-contract tutorials are wrong; `@0gfoundation/*`,
+not `@0glabs/*`). screenContribution (B2.2) before acceptance, verdict logged.
+brainRoot → M5 text record. mintAgenticId at close + delegateUser per T3.
+**Storage, brain/archive split and contribution lifecycle owned by
+shared-session-spec §7-§8.**
+DoD: Agentic ID on explorer with >=2 delegated users; brain/citation DoD in
+shared-session-spec §11.
 
 ### M7 THE BIRTH + FIRST JOB (pair, after MP2)
 `closeSession()`: cap table from log → mint → Agentic ID + delegations →
@@ -281,5 +294,8 @@ DoD: checklist 100%; N can run the entire demo alone.
 [ENS NET: ____] [AgentKit multi-principal: ____] [prize-selection cap: ____]
 Honesty banner copy: "Unsealed mode — running on <provider>; no attestation
 available for this response."
+Open decisions in shared-session-spec (resolve before M0):
+[§9.1 event rename draft.*/canonical.* → run.*: ____ (default: keep frozen names)]
+[§7.5 review mode: BUILD live acceptance only; batch harvest = roadmap line]
 
 *v0.6 supersedes all prior versions. N = Niek, T = teammate.*

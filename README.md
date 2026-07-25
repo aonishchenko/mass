@@ -186,6 +186,7 @@ We keep our claims tight and honest:
 | File | Purpose |
 |------|---------|
 | [MASS-specs.md](./MASS-specs.md) | v0.6 single source of truth — positioning, authority model, interface contracts, module cards, feature register, merge points, timeline |
+| [shared-session-spec.md](./shared-session-spec.md) | Session core module — WS protocol, event sourcing & replay, draft/canonical lanes, contribution lifecycle, 0G brain + archive |
 | [TASKBOARD.md](./TASKBOARD.md) | Checkbox-level execution plan per lane, with merge-point gates |
 | [SUBMISSION-PACK.md](./SUBMISSION-PACK.md) | README skeleton, demo script, booth pitches, video plan, per-track checklists |
 | [PITCH.md](./PITCH.md) | 4-minute pitch script, slide sequence, and an exhaustive Q&A playbook |
