@@ -1,7 +1,13 @@
-name: Publish zg-storage image
+name: Publish & deploy zg-storage
 
-# Builds the 0G Storage sidecar and pushes it to ghcr.io, so Railway can deploy
-# it as a public image without needing its GitHub App linked to the account.
+# Builds the 0G Storage sidecar, pushes it to ghcr.io, and tells Railway to pull
+# the new image. Railway deploys from a public image rather than from GitHub
+# source, because its GitHub App is not linked to the Railway account and a
+# project-scoped RAILWAY_API_TOKEN cannot create a repo trigger.
+#
+# Path-filtered on purpose: a commit that does not touch the sidecar produces a
+# byte-identical image, so redeploying would restart a healthy service for no
+# reason. Use "Run workflow" to force one.
 
 on:
   push:
@@ -11,8 +17,12 @@ on:
       - ".github/workflows/zg-storage-image.yml"
   workflow_dispatch:
 
+concurrency:
+  group: zg-storage-deploy
+  cancel-in-progress: false
+
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -26,10 +36,76 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: docker/build-push-action@v6
+      - id: build
+        uses: docker/build-push-action@v6
         with:
           context: ./services/zg-storage
           push: true
           tags: |
             ghcr.io/${{ github.repository_owner }}/mass-zg-storage:latest
             ghcr.io/${{ github.repository_owner }}/mass-zg-storage:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Trigger Railway deploy
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+          SERVICE_ID: ${{ secrets.RAILWAY_SERVICE_ID }}
+          ENVIRONMENT_ID: ${{ secrets.RAILWAY_ENVIRONMENT_ID }}
+        run: |
+          set -euo pipefail
+
+          # Pin the service to this exact commit's image. Deploying :latest would
+          # race — Railway could pull whatever :latest points at by the time it
+          # starts, which is not necessarily the image built above.
+          IMAGE="ghcr.io/${{ github.repository_owner }}/mass-zg-storage:${{ github.sha }}"
+
+          gql() {
+            curl -sS --fail-with-body --max-time 60 https://backboard.railway.com/graphql/v2 \
+              -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
+              -H 'content-type: application/json' \
+              -d "$1"
+          }
+
+          echo "Pointing service at $IMAGE"
+          gql "$(jq -nc --arg s "$SERVICE_ID" --arg e "$ENVIRONMENT_ID" --arg i "$IMAGE" '{
+            query: "mutation($s:String!,$e:String!,$i:String!){ serviceInstanceUpdate(serviceId:$s, environmentId:$e, input:{ source:{ image:$i } }) }",
+            variables: { s: $s, e: $e, i: $i }
+          }')" | tee /tmp/update.json
+          grep -q '"serviceInstanceUpdate":true' /tmp/update.json
+
+          echo "Deploying"
+          gql "$(jq -nc --arg s "$SERVICE_ID" --arg e "$ENVIRONMENT_ID" '{
+            query: "mutation($s:String!,$e:String!){ serviceInstanceDeployV2(serviceId:$s, environmentId:$e) }",
+            variables: { s: $s, e: $e }
+          }')" | tee /tmp/deploy.json
+          DEPLOY_ID=$(jq -r '.data.serviceInstanceDeployV2' /tmp/deploy.json)
+          echo "deployment: $DEPLOY_ID"
+
+          # Fail the workflow on a failed deploy — a green tick on a broken
+          # deploy is worse than no automation at all.
+          for _ in $(seq 1 40); do
+            STATUS=$(gql "$(jq -nc --arg d "$DEPLOY_ID" '{
+              query: "query($d:String!){ deployment(id:$d){ status } }", variables: { d: $d }
+            }')" | jq -r '.data.deployment.status')
+            echo "status: $STATUS"
+            case "$STATUS" in
+              SUCCESS) echo "deployed"; exit 0 ;;
+              FAILED|CRASHED) echo "::error::Railway deploy $STATUS"; exit 1 ;;
+            esac
+            sleep 15
+          done
+          echo "::error::timed out waiting for Railway deploy"
+          exit 1
+
+      - name: Verify sidecar health
+        run: |
+          set -euo pipefail
+          for _ in $(seq 1 12); do
+            if curl -sS --max-time 20 https://zg-storage-production.up.railway.app/health | grep -q '"ok":true'; then
+              echo "sidecar healthy"; exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::sidecar did not become healthy"
+          exit 1
