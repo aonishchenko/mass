@@ -250,6 +250,14 @@ export interface Candidate {
   text: string;
   sourceEventId: string;
   seat: string;
+  /**
+   * Extraction's opinion, not its verdict. §7.5.2 says candidates are
+   * PRE-MARKED, not filtered: the crew always sees everything they said, so a
+   * model that misjudges a line cannot silently veto a contribution.
+   */
+  suggested: boolean;
+  /** Extraction's cleaned-up rewrite, when it differs from what was said. */
+  original?: string;
 }
 
 // ---------------------------------------------------------------------------

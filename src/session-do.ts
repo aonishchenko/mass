@@ -419,25 +419,30 @@ export class SessionRoom extends DurableObject<Env> {
         text: (e.payload as InstructPayload).text,
       }));
 
-    // Manual harvest is the baseline; extraction is an enhancement on top and
-    // must never be a dependency (§7.5.6). An extraction that returns nothing is
-    // a real answer ("none of this was teaching"), so it is NOT treated as
-    // failure — only a thrown error falls back to the raw list.
-    let picked = humanLines;
+    // Extraction PRE-MARKS, it does not filter (§7.5.2). Every human line stays
+    // on the list; suggestion only changes emphasis. A model that misjudges a
+    // line must not be able to silently veto someone's contribution.
+    let suggestions = new Map<string, string>();
     if (this.env.ZG_ROUTER_KEY) {
       try {
-        picked = await extractCandidates(this.env, humanLines);
+        const extracted = await extractCandidates(this.env, humanLines);
+        suggestions = new Map(extracted.map((e) => [e.eventId, e.text]));
       } catch (err) {
-        console.error("extraction failed, falling back to manual harvest", err);
+        console.error("extraction failed; every line stays selectable", err);
       }
     }
 
-    this.candidates = picked.map((p) => ({
-      candidateId: newId("cand"),
-      text: p.text,
-      sourceEventId: p.eventId,
-      seat: p.seat,
-    }));
+    this.candidates = humanLines.map((p) => {
+      const rewritten = suggestions.get(p.eventId);
+      return {
+        candidateId: newId("cand"),
+        text: rewritten ?? p.text,
+        original: rewritten && rewritten !== p.text ? p.text : undefined,
+        sourceEventId: p.eventId,
+        seat: p.seat,
+        suggested: rewritten !== undefined,
+      };
+    });
 
     await this.emit(
       "harvest.opened",

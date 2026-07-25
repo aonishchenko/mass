@@ -169,27 +169,54 @@ export const Rail: FC<{ view: SessionView; send: (i: Intent) => void }> = ({ vie
           </>
         ) : (
           <>
+            <p className="pb-2 text-[11.5px] leading-snug text-[var(--color-muted)]">
+              Suggested first — but everything you said is keepable. Keep what the
+              agent should know forever.
+            </p>
             <ul className="space-y-1.5">
-              {view.candidates.map((c) => (
-                <li key={c.candidateId} className="rounded-md border border-[#1a1a18]/12 bg-white/50 p-2">
-                  <p className="text-[12px] leading-snug">{c.text}</p>
-                  <button
-                    onClick={() =>
-                      send({
-                        kind: "keepCandidate",
-                        harvestId: view.harvestId,
-                        candidateId: c.candidateId,
-                        text: c.text,
-                      })
-                    }
-                    className="mt-1 rounded bg-[var(--color-ink)] px-2 py-0.5 text-[11px] text-[var(--color-cream)]"
+              {[...view.candidates]
+                .sort((a, b) => Number(b.suggested) - Number(a.suggested))
+                .map((c) => (
+                  <li
+                    key={c.candidateId}
+                    className={`rounded-md border p-2 ${
+                      c.suggested
+                        ? "border-[var(--color-accent)]/40 bg-[var(--color-accent)]/8"
+                        : "border-[#1a1a18]/12 bg-white/40"
+                    }`}
                   >
-                    Keep
-                  </button>
-                </li>
-              ))}
+                    <p className="text-[12px] leading-snug">{c.text}</p>
+                    {c.original && (
+                      <p className="pt-0.5 text-[10.5px] text-[var(--color-faint)] italic">
+                        you said: “{c.original}”
+                      </p>
+                    )}
+                    <div className="flex items-center justify-between pt-1">
+                      {c.suggested ? (
+                        <span className="text-[10px] tracking-wide text-[var(--color-accent)] uppercase">
+                          suggested
+                        </span>
+                      ) : (
+                        <span />
+                      )}
+                      <button
+                        onClick={() =>
+                          send({
+                            kind: "keepCandidate",
+                            harvestId: view.harvestId,
+                            candidateId: c.candidateId,
+                            text: c.text,
+                          })
+                        }
+                        className="rounded bg-[var(--color-ink)] px-2 py-0.5 text-[11px] text-[var(--color-cream)] hover:opacity-85"
+                      >
+                        Keep
+                      </button>
+                    </div>
+                  </li>
+                ))}
               {view.candidates.length === 0 && (
-                <li className="text-[var(--color-faint)]">nothing to review yet</li>
+                <li className="text-[var(--color-faint)]">nothing said yet to review</li>
               )}
             </ul>
             <div className="flex gap-2 pt-2">

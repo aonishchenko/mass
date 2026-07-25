@@ -22,6 +22,9 @@ export interface Candidate {
   text: string;
   sourceEventId: string;
   seat: string;
+  /** Extraction's suggestion. Unsuggested lines stay keepable — §7.5.2. */
+  suggested: boolean;
+  original?: string;
 }
 
 export interface Turn {
