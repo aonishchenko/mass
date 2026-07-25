@@ -13,8 +13,22 @@ import { useState, type FC } from "react";
 import { BookOpenIcon, ChevronRightIcon } from "lucide-react";
 import type { Contribution, SessionView } from "./session";
 
-/** The agent's name in the room. */
-export const AGENT_NAME = "Doc";
+/**
+ * What to call the agent on screen.
+ *
+ * The crew names it (`session.named`), so nothing here is hardcoded: a room
+ * building a support triager should never be told its agent is called "Doc".
+ * Until somebody names it, it is simply "the agent" — which is honest, and is
+ * itself a prompt to go and name it.
+ */
+export const agentLabel = (view: Pick<SessionView, "agentName">) =>
+  view.agentName?.trim() || "the agent";
+
+/** Sentence-initial form, so copy does not read "The agent knows…" mid-line. */
+export const agentLabelCap = (view: Pick<SessionView, "agentName">) => {
+  const label = agentLabel(view);
+  return label === "the agent" ? "The agent" : label;
+};
 
 /**
  * A short human title for a knowledge unit: its first heading, else its first
@@ -43,19 +57,20 @@ export const BrainPanel: FC<{
   const [expanded, setExpanded] = useState<string | null>(null);
   const known = knownThings(view);
   const open = expanded ?? openId ?? null;
+  const name = agentLabel(view);
 
   return (
     <section className="border-b border-[#1a1a18]/8 px-4 py-3">
       <h2 className="flex items-center gap-1.5 pb-2 text-[11px] tracking-wide text-[var(--color-faint)] uppercase">
-        <BookOpenIcon size={12} /> What {AGENT_NAME} knows ({known.length})
+        <BookOpenIcon size={12} /> What {name} knows ({known.length})
       </h2>
 
       {known.length === 0 ? (
         // An empty state is when a newcomer is most willing to be told what to
         // do, so it instructs instead of apologising.
         <p className="text-[11.5px] leading-snug text-[var(--color-muted)]">
-          {AGENT_NAME} doesn’t know anything yet. Ask it something — it will tell
-          you honestly.
+          {agentLabelCap(view)} doesn’t know anything yet. Ask it something — it
+          will tell you honestly.
         </p>
       ) : (
         <ul className="space-y-0.5">

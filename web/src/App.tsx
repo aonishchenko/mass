@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { MassRuntimeProvider } from "./runtime";
 import { Rail } from "./Rail";
 import { Thread } from "./Thread";
-import { perms, useSession, type Lane } from "./session";
+import { useSession } from "./session";
 import { useWorldVerify } from "./world";
 import { stepById, type BuildStep } from "./buildPath";
 
@@ -40,8 +40,6 @@ export default function App() {
     setActiveStep((current) => (current === step.id ? undefined : step.id));
   };
 
-  const p = perms(view);
-
   useEffect(() => {
     if (!view.error) return;
     const t = setTimeout(clearError, 4000);
@@ -49,7 +47,7 @@ export default function App() {
   }, [view.error, clearError]);
 
   return (
-    <MassRuntimeProvider view={view} send={send}>
+    <MassRuntimeProvider view={view} send={send} slot={mode === "workflow" ? activeStep : undefined}>
       {/*
         B7: judges browse on phones. Below md the rail stacks BELOW the
         conversation instead of being cut off, and nothing scrolls sideways.
@@ -61,15 +59,11 @@ export default function App() {
             seated={!!view.you}
             step={mode === "workflow" ? stepById(activeStep) : undefined}
             onDismissStep={() => setActiveStep(undefined)}
-            onTeach={(text) =>
-              // Tag the contribution with the step it answers, so readiness can
-              // be counted from accepted work rather than asserted.
-              send({
-                kind: "proposeContrib",
-                text,
-                source: "composer",
-                slot: mode === "workflow" ? activeStep : undefined,
-              })
+            onTeach={(text, slot) =>
+              // The step comes from the MESSAGE, recorded when it was said —
+              // not from whatever is selected in the rail at click time, which
+              // credited answers to whichever step someone had opened since.
+              send({ kind: "proposeContrib", text, source: "composer", slot })
             }
           />
         </main>

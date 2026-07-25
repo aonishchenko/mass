@@ -15,10 +15,10 @@ import {
   SproutIcon,
   UsersIcon,
 } from "lucide-react";
-import { agentStatus, perms, type Intent, type SessionView } from "./session";
+import { agentStatus, perms, type Intent, type SessionView, type Tier } from "./session";
 import { EnsPanel } from "./Ens";
 import { BuildPathPanel, ReadinessHint } from "./BuildPathPanel";
-import { AGENT_NAME, BrainPanel, knownThings } from "./Brain";
+import { agentLabel, agentLabelCap, BrainPanel, knownThings } from "./Brain";
 import type { BuildStep } from "./buildPath";
 import type { Mode } from "./App";
 
@@ -79,6 +79,50 @@ const EVENT_LABEL: Record<string, string> = {
 };
 
 const labelFor = (type: string) => EVENT_LABEL[type] ?? type;
+
+/**
+ * What we can actually say about a seat's verification.
+ *
+ * The raw score is not per-person — it reflects the CREDENTIAL used, so every
+ * Orb user shows the same number, which is why six people all read "0.87". But
+ * "✓ Verified human" cannot be said of everyone either:
+ *
+ *  - a DEV-bypass seat was never checked against World at all;
+ *  - a seat below the sybil threshold is deliberately held at Observer, and
+ *    stamping it verified contradicts the downgrade sitting next to it.
+ *
+ * So each case says its own true thing, and none of them says a number.
+ */
+const VerificationBadge: FC<{ seat: { tier: Tier; dev?: boolean } }> = ({ seat }) => {
+  if (seat.dev) {
+    return (
+      <span
+        title="DEV bypass — this proof was never sent to World. Nothing here is verified."
+        className="rounded-full bg-amber-500/20 px-1.5 py-0.5 text-[10px] text-amber-900"
+      >
+        dev · unverified
+      </span>
+    );
+  }
+  if (seat.tier === "T1") {
+    return (
+      <span
+        title="A real World proof, but below our sybil threshold — watch-only until it clears."
+        className="rounded-full bg-[#1a1a18]/6 px-1.5 py-0.5 text-[10px] text-[var(--color-muted)]"
+      >
+        below threshold
+      </span>
+    );
+  }
+  return (
+    <span
+      title="Verified as one unique human by World, and checked on our server."
+      className="rounded-full bg-emerald-600/12 px-1.5 py-0.5 text-[10px] text-emerald-800"
+    >
+      ✓ Verified human
+    </span>
+  );
+};
 
 /** B1: a colleague has states, and waiting is shorter when you can see why. */
 const STATUS_LABEL: Record<string, string> = {
@@ -185,6 +229,7 @@ export const Rail: FC<{
   const [brief, setBrief] = useState("");
   const [logOpen, setLogOpen] = useState(false);
   const [namingOpen, setNamingOpen] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
   const [purposeDraft, setPurposeDraft] = useState("");
   const [authError, setAuthError] = useState<string | null>(null);
   const [delegating, setDelegating] = useState(false);
@@ -200,6 +245,17 @@ export const Rail: FC<{
   /** Something has actually been kept in the open review — otherwise approving errors. */
   const keptAny = pending.some((c) => c.state === "proposed");
   const anchorableCount = view.events.filter((e) => ANCHORED.has(e.type)).length;
+  // nameSession is a Builder intent server-side. Offering "edit" to an Observer
+  // only produced a permission error after they had typed.
+  const canName = me?.tier === "T2" || me?.tier === "T3";
+
+  const openNaming = () => {
+    // Seed with what is already there: an edit should correct the line, not
+    // start from an empty box and silently drop the half nobody retyped.
+    setNameDraft(view.agentName ?? "");
+    setPurposeDraft(view.purpose ?? "");
+    setNamingOpen(true);
+  };
 
   // The ledger in one plain line. Counted from the log; a category with nothing
   // in it is left out rather than shown as a zero.
@@ -277,32 +333,65 @@ export const Rail: FC<{
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              if (purposeDraft.trim()) send({ kind: "nameSession", purpose: purposeDraft.trim() });
+              const agentName = nameDraft.trim();
+              const purpose = purposeDraft.trim();
+              if (agentName || purpose) send({ kind: "nameSession", agentName, purpose });
               setNamingOpen(false);
             }}
-            className="flex gap-1.5 pb-1.5"
+            className="space-y-1.5 pb-1.5"
           >
             <input
               autoFocus
-              value={purposeDraft}
-              onChange={(e) => setPurposeDraft(e.target.value)}
-              placeholder="e.g. Doc, a documentation reviewer"
-              className="min-w-0 flex-1 rounded-md border border-[#1a1a18]/15 bg-white/80 px-2 py-1 text-[11.5px] outline-none"
+              value={nameDraft}
+              onChange={(e) => setNameDraft(e.target.value)}
+              placeholder="Name your agent — e.g. Doc"
+              maxLength={40}
+              className="w-full rounded-md border border-[#1a1a18]/15 bg-white/80 px-2 py-1 text-[11.5px] outline-none"
             />
-            <button className="rounded-md bg-[var(--color-ink)] px-2 text-[11px] text-[var(--color-cream)]">
-              Save
-            </button>
+            <div className="flex gap-1.5">
+              <input
+                value={purposeDraft}
+                onChange={(e) => setPurposeDraft(e.target.value)}
+                placeholder="What it does — e.g. reviews our docs"
+                maxLength={120}
+                className="min-w-0 flex-1 rounded-md border border-[#1a1a18]/15 bg-white/80 px-2 py-1 text-[11.5px] outline-none"
+              />
+              <button className="rounded-md bg-[var(--color-ink)] px-2 text-[11px] text-[var(--color-cream)]">
+                Save
+              </button>
+            </div>
+            {/* Naming it is what gives it a name on ENS, so say so up front. */}
+            <p className="text-[10px] leading-tight text-[var(--color-faint)]">
+              {view.agentEnsName
+                ? `Answers to ${view.agentEnsName} — renaming issues a new subname.`
+                : "Naming it gives it its own ENS subname under the crew's name."}
+            </p>
           </form>
         ) : (
           <button
-            onClick={() => seated && setNamingOpen(true)}
-            disabled={!seated}
-            title={seated ? "Say what you are building" : undefined}
-            className="block w-full truncate pb-1 text-left text-[12px] disabled:cursor-default"
+            onClick={() => canName && openNaming()}
+            disabled={!canName}
+            title={
+              canName
+                ? "Name your agent and say what it is for"
+                : "Verify as a Builder to name the agent"
+            }
+            className="block w-full pb-1 text-left text-[12px] disabled:cursor-default"
           >
-            <span className="text-[var(--color-muted)]">Building: </span>
-            <span className="font-medium">{view.purpose ?? "an agent"}</span>
-            {seated && <span className="pl-1 text-[10px] text-[var(--color-faint)]">edit</span>}
+            <span className="truncate">
+              <span className="text-[var(--color-muted)]">Building: </span>
+              <span className="font-medium">{agentLabel(view)}</span>
+              {view.purpose && (
+                <span className="text-[var(--color-muted)]"> — {view.purpose}</span>
+              )}
+              {canName && <span className="pl-1 text-[10px] text-[var(--color-faint)]">edit</span>}
+            </span>
+            {/* The agent's ENS name is its identity; show it once it has one. */}
+            {view.agentEnsName && (
+              <span className="block truncate text-[10px] text-[var(--color-faint)]">
+                {view.agentEnsName}
+              </span>
+            )}
           </button>
         )}
         <div className="flex items-center justify-between">
@@ -411,7 +500,7 @@ export const Rail: FC<{
           */}
           <li className="flex items-center justify-between rounded-md bg-[var(--color-accent)]/8 px-1.5 py-1">
             <span className="min-w-0">
-              <span className="font-semibold">🤖 {AGENT_NAME}</span>
+              <span className="font-semibold">🤖 {agentLabelCap(view)}</span>
               <span className="text-[var(--color-muted)]"> — the agent</span>
               <span className="block truncate text-[10px] text-[var(--color-muted)]">
                 {STATUS_LABEL[agentStatus(view)] ??
@@ -441,18 +530,7 @@ export const Rail: FC<{
                   )}
                 </span>
                 <span className="flex shrink-0 items-center gap-1.5">
-                  {s.sybilScore !== undefined && (
-                    // The score World gives us reflects the CREDENTIAL used, not
-                    // the individual — so every Orb user shows the same number.
-                    // A number we cannot explain per-person is worse than no
-                    // number, so we show what is actually true: verified.
-                    <span
-                      title="Verified as one unique human by World, and checked on our server."
-                      className="rounded-full bg-emerald-600/12 px-1.5 py-0.5 text-[10px] text-emerald-800"
-                    >
-                      ✓ Verified human
-                    </span>
-                  )}
+                  {s.sybilScore !== undefined && <VerificationBadge seat={s} />}
                   <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${t.cls}`}>
                     {t.label}
                   </span>
@@ -552,10 +630,10 @@ export const Rail: FC<{
 
       <BrainPanel view={view} />
 
-      <Section icon={<DatabaseIcon size={12} />} title={`Who owns ${AGENT_NAME}`}>
+      <Section icon={<DatabaseIcon size={12} />} title={`Who owns ${agentLabel(view)}`}>
         {totalContributions === 0 ? (
           <p className="text-[11.5px] leading-snug text-[var(--color-muted)]">
-            Nobody owns {AGENT_NAME} yet. Teach it something and your name
+            Nobody owns {agentLabel(view)} yet. Teach it something and your name
             appears here.
           </p>
         ) : (
@@ -742,6 +820,9 @@ export const Rail: FC<{
         eventCount={view.events.length}
         anchorable={anchorableCount}
         eventIds={view.events.map((e) => e.id)}
+        seatNames={Object.fromEntries(
+          Object.values(view.seats).map((st) => [st.seat, st.ensName ?? st.name])
+        )}
       />
 
       <Section icon={<ScrollTextIcon size={12} />} title="Ledger">

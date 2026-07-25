@@ -16,6 +16,7 @@ import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { SessionView } from "./session";
 import type { BuildStep } from "./buildPath";
+import { agentLabel } from "./Brain";
 
 const CITATION = /(\(per [^)]*'s contribution #\d+\))/g;
 const IS_CITATION = /^\(per .*'s contribution #\d+\)$/;
@@ -85,8 +86,18 @@ export const AgentMarkdown: FC<{ text: string }> = ({ text }) => (
   </Markdown>
 );
 
-/** Reads the hovered message's own text out of assistant-ui's message context. */
-const TeachThisButton: FC<{ onTeach: (text: string) => void }> = ({ onTeach }) => {
+/**
+ * Reads the hovered message's own text — and the build-path step that was on
+ * screen when it was sent — out of assistant-ui's message context.
+ *
+ * The step travels with the message rather than being read off the rail at
+ * click time: someone who answers "Soul", opens "Voice" to see what is next,
+ * then teaches their earlier answer must not have it filed under Voice.
+ */
+const TeachThisButton: FC<{ onTeach: (text: string, slot?: string) => void; slot?: string }> = ({
+  onTeach,
+  slot,
+}) => {
   const text = useMessage((m) =>
     m.content
       .map((p) => (p.type === "text" ? p.text : ""))
@@ -101,7 +112,7 @@ const TeachThisButton: FC<{ onTeach: (text: string) => void }> = ({ onTeach }) =
   return (
     <div className="flex justify-end pt-1.5">
       <button
-        onClick={() => onTeach(text)}
+        onClick={() => onTeach(text, slot)}
         title="Propose this as something the agent keeps forever"
         className="flex items-center gap-1.5 rounded-md border border-[var(--color-accent)]/35 bg-[var(--color-accent)]/10 px-2.5 py-1 text-xs text-[var(--color-accent)] transition-colors hover:bg-[var(--color-accent)]/20"
       >
@@ -117,19 +128,27 @@ const TeachThisButton: FC<{ onTeach: (text: string) => void }> = ({ onTeach }) =
  * the same act in bulk. A separate compose-a-contribution box would put the
  * fork back at input time, which is what made teaching feel like a chore.
  */
-const UserMessage: FC<{ onTeach: (text: string) => void; canTeach: boolean }> = ({
-  onTeach,
-  canTeach,
-}) => (
-  <MessagePrimitive.Root className="mx-auto w-full max-w-3xl px-4 py-3">
-    <div className="ml-auto w-fit max-w-[80%]">
-      <div className="rounded-2xl bg-[#1a1a18]/5 px-4 py-2.5 text-[15px] leading-relaxed">
-        <MessagePrimitive.Parts />
+const UserMessage: FC<{
+  view: SessionView;
+  onTeach: (text: string, slot?: string) => void;
+  canTeach: boolean;
+}> = ({ view, onTeach, canTeach }) => {
+  // The turn is the log's record of this message, so the step it was answering
+  // is read from there rather than from the current selection.
+  const id = useMessage((m) => m.id);
+  const slot = view.turns.find((t) => t.id === id)?.slot;
+
+  return (
+    <MessagePrimitive.Root className="mx-auto w-full max-w-3xl px-4 py-3">
+      <div className="ml-auto w-fit max-w-[80%]">
+        <div className="rounded-2xl bg-[#1a1a18]/5 px-4 py-2.5 text-[15px] leading-relaxed">
+          <MessagePrimitive.Parts />
+        </div>
+        {canTeach && <TeachThisButton onTeach={onTeach} slot={slot} />}
       </div>
-      {canTeach && <TeachThisButton onTeach={onTeach} />}
-    </div>
-  </MessagePrimitive.Root>
-);
+    </MessagePrimitive.Root>
+  );
+};
 
 /** Must match UNTAUGHT in src/zg/inference.ts — the prompt and the UI agree. */
 const UNTAUGHT_MARKER = "haven't been taught that yet";
@@ -187,43 +206,69 @@ const AssistantMessage: FC<{
  * it feels like being interviewed by a colleague. Follow-ups stay folded away,
  * to be used only if the first answer is thin.
  */
-const InterviewCard: FC<{ step: BuildStep; onDismiss: () => void }> = ({ step, onDismiss }) => (
-  <div className="mx-auto mb-3 w-full max-w-3xl rounded-xl border border-[var(--color-accent)]/30 bg-[var(--color-accent)]/8 px-4 py-3">
-    <div className="flex items-start justify-between gap-3">
-      <span className="text-[10px] tracking-wide text-[var(--color-accent)] uppercase">
-        Step {step.order} of 12 · {step.title}
-        {step.earnsOwnership && " · earns ownership"}
-      </span>
-      <button
-        onClick={onDismiss}
-        title="Answer something else instead"
-        className="shrink-0 text-[var(--color-faint)] hover:text-[var(--color-ink)]"
-      >
-        <XIcon size={13} />
-      </button>
+const InterviewCard: FC<{ view: SessionView; step: BuildStep; onDismiss: () => void }> = ({
+  view,
+  step,
+  onDismiss,
+}) => {
+  // What this step has already collected, straight from the log: answers the
+  // crew has approved, and answers still waiting on them.
+  const forStep = Object.values(view.contributions).filter((c) => c.slot === step.id);
+  const accepted = forStep.filter((c) => c.state === "accepted").length;
+  const waiting = forStep.filter((c) => c.state === "proposed").length;
+
+  return (
+    <div className="mx-auto mb-3 w-full max-w-3xl rounded-xl border border-[var(--color-accent)]/30 bg-[var(--color-accent)]/8 px-4 py-3">
+      <div className="flex items-start justify-between gap-3">
+        <span className="text-[10px] tracking-wide text-[var(--color-accent)] uppercase">
+          Step {step.order} of 12 · {step.title}
+          {step.earnsOwnership && " · earns ownership"}
+        </span>
+        <button
+          onClick={onDismiss}
+          title="Answer something else instead"
+          className="shrink-0 text-[var(--color-faint)] hover:text-[var(--color-ink)]"
+        >
+          <XIcon size={13} />
+        </button>
+      </div>
+
+      <p className="pt-1.5 text-[15px] leading-snug">{step.ask}</p>
+
+      {step.followUps.length > 0 && (
+        <details className="pt-2">
+          <summary className="cursor-pointer text-[11px] text-[var(--color-muted)]">
+            If that felt thin, it will also ask…
+          </summary>
+          <ul className="list-disc pt-1 pl-4 text-[11.5px] leading-snug text-[var(--color-muted)]">
+            {step.followUps.map((f, i) => (
+              <li key={i}>{f}</li>
+            ))}
+          </ul>
+        </details>
+      )}
+
+      {/*
+        An answer to a question the agent asked goes to the crew, not back
+        through the agent — being asked something and then told "I haven't been
+        taught that yet" is the agent refusing its own interview.
+      */}
+      <p className="pt-2 text-[11px] text-[var(--color-faint)]">
+        Type your answer below — it goes straight to the crew for approval, and
+        ticks when they accept it. — {step.doneWhen}
+      </p>
+
+      {(accepted > 0 || waiting > 0) && (
+        <p className="pt-1 text-[11px] text-[var(--color-accent)]">
+          {accepted > 0 && `${accepted} accepted`}
+          {accepted > 0 && waiting > 0 && " · "}
+          {waiting > 0 && `${waiting} waiting for the crew`}
+          {` · needs ${step.needs}`}
+        </p>
+      )}
     </div>
-
-    <p className="pt-1.5 text-[15px] leading-snug">{step.ask}</p>
-
-    {step.followUps.length > 0 && (
-      <details className="pt-2">
-        <summary className="cursor-pointer text-[11px] text-[var(--color-muted)]">
-          If that felt thin, it will also ask…
-        </summary>
-        <ul className="list-disc pt-1 pl-4 text-[11.5px] leading-snug text-[var(--color-muted)]">
-          {step.followUps.map((f, i) => (
-            <li key={i}>{f}</li>
-          ))}
-        </ul>
-      </details>
-    )}
-
-    <p className="pt-2 text-[11px] text-[var(--color-faint)]">
-      Answer in your own words, then <em>Teach this</em> on your message. Ticks
-      when the crew approves it. — {step.doneWhen}
-    </p>
-  </div>
-);
+  );
+};
 
 export const Thread: FC<{
   view: SessionView;
@@ -232,7 +277,7 @@ export const Thread: FC<{
   /** The build-path step being answered, when the crew is in workflow mode. */
   step?: BuildStep;
   onDismissStep: () => void;
-  onTeach: (text: string) => void;
+  onTeach: (text: string, slot?: string) => void;
 }> = ({ view, seated, step, onDismissStep, onTeach }) => {
   // "Teach it now" points at the one input there is: focus it and let them type
   // the thing the agent just admitted it does not know.
@@ -264,9 +309,10 @@ export const Thread: FC<{
               </>
             ) : (
               <>
-                A crew is teaching <strong>Doc</strong>, {view.purpose ?? "an agent"}.
-                Everything it knows — and who taught each thing — is listed in
-                the crew panel. Join to teach it something yourself.
+                A crew is teaching <strong>{agentLabel(view)}</strong>
+                {view.purpose ? ` — ${view.purpose}` : ""}. Everything it knows
+                — and who taught each thing — is listed in the crew panel. Join
+                to teach it something yourself.
               </>
             )}
           </p>
@@ -276,7 +322,7 @@ export const Thread: FC<{
       <ThreadPrimitive.Messages
         components={{
           UserMessage: () => (
-            <UserMessage onTeach={onTeach} canTeach={seated && !view.closed} />
+            <UserMessage view={view} onTeach={onTeach} canTeach={seated && !view.closed} />
           ),
           AssistantMessage: () => (
             <AssistantMessage view={view} onFocusTeach={focusComposer} />
@@ -286,7 +332,7 @@ export const Thread: FC<{
 
       <div className="sticky bottom-0 mx-auto mt-auto w-full max-w-3xl bg-gradient-to-b from-transparent via-[var(--color-cream)]/85 to-[var(--color-cream)] px-4 pt-4 pb-3">
         {/* One question at a time — never a form (workflow doc, Part 3). */}
-        {step && <InterviewCard step={step} onDismiss={onDismissStep} />}
+        {step && <InterviewCard view={view} step={step} onDismiss={onDismissStep} />}
 
         {/* Working thing first, explanation second: a new arrival gets one
             concrete thing to try, not a lecture about ownership. */}

@@ -76,8 +76,17 @@ export function joinName(label: string, env: EnsEnv): string {
   return `${label}.${parentName(env)}`;
 }
 
-export function agentName(env: EnsEnv): string {
-  return `${env.ENS_AGENT_LABEL || "docs"}.${parentName(env)}`;
+/**
+ * The agent's ENS name.
+ *
+ * Once a crew names their agent, the subname derived at that moment travels in
+ * the log (`session.named`) and is used here — the identity belongs to the crew
+ * that built it. The env label is only the fallback for a room whose agent has
+ * not been named yet: one label baked into a deployment cannot be right for
+ * every session that deployment runs.
+ */
+export function agentName(env: EnsEnv, session?: Pick<Session, "agentEnsName">): string {
+  return session?.agentEnsName || `${env.ENS_AGENT_LABEL || "docs"}.${parentName(env)}`;
 }
 
 /**
@@ -158,9 +167,13 @@ export function assembleAgentProfile(session: Session, env: EnsEnv): AgentProfil
     .sort((a, b) => b.contributions - a.contributions);
 
   return {
-    name: agentName(env),
+    name: agentName(env, session),
     role: ROLE,
-    description: `A ${ROLE} built together by ${Object.keys(seats).length} verified humans. Cites its teachers.`,
+    // The crew's own words when they have given them; the generic line only
+    // stands in until somebody says what they are building.
+    description:
+      session.purpose?.trim() ||
+      `A ${ROLE} built together by ${Object.keys(seats).length} verified humans. Cites its teachers.`,
     skills: SKILLS,
     session: session.sessionId,
     availability: session.closed ? "for-hire" : "in-session",

@@ -422,6 +422,48 @@ export class SessionRoom extends DurableObject<Env> {
     );
   }
 
+  /**
+   * Every ENS label already spoken for in this room — seats AND the agent.
+   * They share one parent name, so a crew member called "doc" and an agent
+   * called "Doc" would otherwise both claim `doc.mass.eth`.
+   */
+  private takenLabels(): Set<string> {
+    const labels = Object.values(this.session.seats)
+      .map((st) => st.ensName?.split(".")[0])
+      .filter((l): l is string => Boolean(l));
+    const agentLabel = this.session.agentEnsName?.split(".")[0];
+    if (agentLabel) labels.push(agentLabel);
+    return new Set(labels);
+  }
+
+  /**
+   * Name the agent, say what it is for, or both.
+   *
+   * Naming it is what gives it its ENS identity: the label is derived here and
+   * carried in the event, so the agent's name comes from the crew and survives
+   * replay — rather than being one label baked into the deployment's env for
+   * every session it ever runs (M5).
+   */
+  private async nameSession(agentName: string | undefined, purpose: string | undefined, seat: Seat) {
+    const name = agentName?.trim().slice(0, 40);
+    const said = purpose?.trim().slice(0, 120);
+    if (!name && !said) return;
+
+    // Only re-derive when the name actually changes: re-issuing an identical
+    // subname on every purpose edit would churn the agent's identity for no
+    // reason, and a rename should keep working rather than collide with itself.
+    const renamed = Boolean(name && name !== this.session.agentName);
+    const agentEnsName = renamed
+      ? joinName(uniqueSeatLabel(name!, this.takenLabels()), this.env)
+      : undefined;
+
+    await this.emit(
+      "session.named",
+      { agentName: name, purpose: said, agentEnsName },
+      { seat: seat.seat, tier: seat.tier }
+    );
+  }
+
   private broadcast(frame: Frame) {
     const body = JSON.stringify(frame);
     for (const ws of this.ctx.getWebSockets()) {
@@ -491,13 +533,9 @@ export class SessionRoom extends DurableObject<Env> {
       case "resumeSeat":
         return this.resumeSeat(intent.token, ws);
       case "nameSession":
-        return this.emit(
-          "session.named",
-          { purpose: intent.purpose.slice(0, 120) },
-          { seat: seat!.seat, tier: seat!.tier }
-        );
+        return this.nameSession(intent.agentName, intent.purpose, seat!);
       case "instruct":
-        return this.instruct(intent.text, intent.lane, seat!);
+        return this.instruct(intent.text, intent.lane, seat!, intent.slot);
       case "proposeContrib":
         return this.propose(intent.text, intent.source, seat!, intent.fromRunId, intent.slot);
       case "challengeContrib":
@@ -569,12 +607,7 @@ export class SessionRoom extends DurableObject<Env> {
     const seatId = newId("s");
     // Assign a unique ENS subname now (M5) so the seat has a resolvable identity
     // from the first event — zero hex anywhere in the UI.
-    const takenLabels = new Set(
-      Object.values(this.session.seats)
-        .map((st) => st.ensName?.split(".")[0])
-        .filter((l): l is string => Boolean(l))
-    );
-    const ensName = joinName(uniqueSeatLabel(name, takenLabels), this.env);
+    const ensName = joinName(uniqueSeatLabel(name, this.takenLabels()), this.env);
     await this.emit("seat.claimed", { seat: seatId, name, tier: "T1", ensName }, { system: true });
 
     // Sybil score gates capability (HARD REQUIREMENT 2): below threshold the seat
@@ -758,11 +791,11 @@ export class SessionRoom extends DurableObject<Env> {
     await this.recomputePerms();
   }
 
-  private async instruct(text: string, lane: Lane, seat: Seat) {
+  private async instruct(text: string, lane: Lane, seat: Seat, slot?: string) {
     const instructId = newId("i");
     await this.emit<InstructPayload>(
       "instruct",
-      { instructId, text, lane },
+      { instructId, text, lane, slot },
       { seat: seat.seat, tier: seat.tier }
     );
 
@@ -1061,9 +1094,22 @@ export class SessionRoom extends DurableObject<Env> {
     if (!cand) throw new Error("unknown candidate");
 
     const contribId = newId("c");
+    // The step this answers is whatever was on screen when the line was SAID,
+    // read back off the source event. Without this, everything kept through the
+    // harvest — the path a crew uses at session close — counts toward no step,
+    // and readiness stays flat while contributions are being accepted.
+    const source = this.session.events.find((e) => e.id === cand.sourceEventId);
+    const slot = source ? (source.payload as InstructPayload).slot : undefined;
     await this.emit(
       "contrib.proposed",
-      { contribId, text, source: "harvest", harvestId, fromEventId: cand.sourceEventId },
+      {
+        contribId,
+        text,
+        source: "harvest",
+        harvestId,
+        fromEventId: cand.sourceEventId,
+        slot,
+      },
       { seat: seat.seat, tier: seat.tier }
     );
     const verdict = await mockScreen(text);

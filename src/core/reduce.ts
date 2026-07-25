@@ -23,6 +23,7 @@ import type {
   SeatClaimedPayload,
   SelfieOkPayload,
   Session,
+  SessionNamedPayload,
 } from "./types.js";
 
 export function apply(s: Session, e: MassEvent): Session {
@@ -37,8 +38,16 @@ export function apply(s: Session, e: MassEvent): Session {
     }
 
     case "session.named": {
-      const p = e.payload as { purpose?: string };
-      return { ...s, purpose: p.purpose?.trim() || s.purpose };
+      // Each field is kept independently: naming the agent must not wipe the
+      // purpose somebody else wrote, and correcting the purpose must not drop
+      // the ENS name the agent already answers to.
+      const p = e.payload as SessionNamedPayload;
+      return {
+        ...s,
+        purpose: p.purpose?.trim() || s.purpose,
+        agentName: p.agentName?.trim() || s.agentName,
+        agentEnsName: p.agentEnsName || s.agentEnsName,
+      };
     }
 
     case "seat.claimed": {

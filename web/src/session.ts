@@ -39,6 +39,12 @@ export interface Turn {
   running?: boolean;
   /** Seat whose instruction produced this turn — drives per-seat run state. */
   seat?: string;
+  /**
+   * The build-path step that was on screen when this was said. Carried on the
+   * turn so "Teach this" credits the step the person was actually answering,
+   * not whichever step happens to be selected when they click.
+   */
+  slot?: string;
 }
 
 export interface Contribution {
@@ -57,10 +63,22 @@ export interface SessionView {
   connected: boolean;
   /** What the crew said they are building (A4). Falls back in the UI. */
   purpose?: string;
+  /** What the crew called their agent, and the ENS subname that gave it. */
+  agentName?: string;
+  agentEnsName?: string;
   you: string | null;
   seats: Record<
     string,
-    { seat: string; name: string; tier: Tier; sybilScore?: number; present: boolean; ensName?: string }
+    {
+      seat: string;
+      name: string;
+      tier: Tier;
+      sybilScore?: number;
+      present: boolean;
+      ensName?: string;
+      /** This seat's proof came from the DEV bypass — never checked by World. */
+      dev?: boolean;
+    }
   >;
   /** True once any verification was issued by the DEV fallback (honesty banner). */
   devMode: boolean;
@@ -109,7 +127,14 @@ function apply(v: SessionView, e: MassEvent): SessionView {
   const p = e.payload ?? {};
   switch (e.type) {
     case "session.named":
-      return { ...v, purpose: p.purpose };
+      // Field by field: naming the agent must not erase the purpose someone
+      // else wrote, and editing the purpose must not drop its ENS name.
+      return {
+        ...v,
+        purpose: p.purpose ?? v.purpose,
+        agentName: p.agentName ?? v.agentName,
+        agentEnsName: p.agentEnsName ?? v.agentEnsName,
+      };
     case "seat.claimed":
       return {
         ...v,
@@ -137,7 +162,13 @@ function apply(v: SessionView, e: MassEvent): SessionView {
       return {
         ...v,
         devMode: v.devMode || !!p.dev,
-        seats: { ...v.seats, [p.seat]: { ...s, tier: p.grantedTier, sybilScore: p.sybilScore } },
+        seats: {
+          ...v.seats,
+          // `dev` is kept per seat, not just as the global banner: a seat that
+          // came through the bypass must not be able to display itself as
+          // verified while the banner overhead says nothing was checked.
+          [p.seat]: { ...s, tier: p.grantedTier, sybilScore: p.sybilScore, dev: !!p.dev },
+        },
       };
     }
     case "verify.agentkit.ok": {
@@ -146,7 +177,7 @@ function apply(v: SessionView, e: MassEvent): SessionView {
       return {
         ...v,
         devMode: v.devMode || !!p.dev,
-        seats: { ...v.seats, [p.seat]: { ...s, tier: "T3" } },
+        seats: { ...v.seats, [p.seat]: { ...s, tier: "T3", dev: s.dev || !!p.dev } },
       };
     }
     case "instruct":
@@ -160,6 +191,7 @@ function apply(v: SessionView, e: MassEvent): SessionView {
             role: "user",
             text: p.text,
             lane: p.lane,
+            slot: p.slot,
             seat: e.actor.seat,
             seatName: v.seats[e.actor.seat ?? ""]?.name,
           },
@@ -269,9 +301,12 @@ export type Intent = Record<string, unknown> & { kind: string };
  * slower, and "thinking…" explains a pause that a spinner does not.
  */
 export function agentStatus(view: SessionView): "idle" | "thinking" | "learning" | "answering" {
-  if (view.brainPending) return "learning";
+  // What it is doing right now outranks what it is filing away: a brain write
+  // running behind a live answer used to report "learning…" while the agent was
+  // visibly typing.
   const running = view.turns.some((t) => t.running);
   if (running) return view.turns.some((t) => t.running && t.text.length > 0) ? "answering" : "thinking";
+  if (view.brainPending) return "learning";
   return "idle";
 }
 
