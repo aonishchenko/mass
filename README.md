@@ -5,7 +5,7 @@
 # MASS — Multiplayer Agent Session System
 
 > **Build your next team member. Together. On the record.**
-> ETHGlobal Lisbon 2026 · Team MASS (Turtle)
+> ETHGlobal Lisbon 2026 · Team MASS
 
 A crew of verified humans collectively builds an AI team member. Its brain grows
 from accepted contributions, every contribution is attributed on an immutable
