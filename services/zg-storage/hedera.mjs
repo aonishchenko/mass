@@ -91,13 +91,36 @@ export async function createTopic(memo = "MASS agent provenance log") {
  */
 export async function submitEvent(topicId, event) {
   const c = getClient();
+
   const projection = {
     id: event.id,
     ts: event.ts,
     type: event.type,
     actorTier: event.actor?.tier ?? (event.actor?.agent ? "agent" : "system"),
+
+    // The pseudonymous seat, e.g. "s_41aa4329bf2d". Without it the log says
+    // only "a Signer co-signed something" and the cap table CANNOT be
+    // reconstructed from HCS alone — which is precisely the claim the log is
+    // supposed to evidence. Seat ids are opaque randoms; display names stay
+    // off-chain, in the encrypted 0G archive.
+    seat: event.actor?.seat ?? event.ref?.seat,
+
+    // A whitelist of non-sensitive correlation keys, so a reader can group
+    // "these two cosigns and this acceptance belong to one contribution", and
+    // follow a brain update or a payment to the artefact it produced. All are
+    // ids or hashes, never content.
+    contribId: event.ref?.contribId,
+    storageRootHash: event.ref?.storageRootHash,
+    hederaTxId: event.ref?.hederaTxId,
+
     payloadHash: event.payloadHash,
   };
+
+  // Still PICK, never delete: undefined members simply vanish from the JSON, so
+  // a future event field cannot reach a public ledger by being overlooked.
+  for (const k of Object.keys(projection)) {
+    if (projection[k] === undefined) delete projection[k];
+  }
 
   const res = await new TopicMessageSubmitTransaction()
     .setTopicId(topicId)

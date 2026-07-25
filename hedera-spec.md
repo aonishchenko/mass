@@ -129,12 +129,30 @@ Explorer: `https://hashscan.io/testnet`
 
 ## 4.1 Hash-only payloads
 
-One topic per agent. The submitted message is **exactly** master
-[C1](./MASS-specs.md)'s HCS projection and nothing more:
+One topic per agent. The submitted message is a **hash-only projection**:
 
 ```ts
-{ id, ts, type, actorTier, payloadHash }
+{ id, ts, type, actorTier, seat?, contribId?, storageRootHash?, hederaTxId?, payloadHash }
 ```
+
+**Why `seat` is published (revision, 2026-07-25).** The first cut followed master
+C1 exactly — `{id, ts, type, actorTier, payloadHash}` — and that turned out to be
+too thin to support our own headline claim. `actorTier: "T3"` says *a* Signer
+co-signed; it does not say **which**. So the cap table could NOT be reconstructed
+from HCS alone, while novelty claim #1 says *"the HCS log is the evidence behind
+the cap table."* A judge checking that would have found it unsupported.
+
+Seat ids are opaque randoms (`s_41aa4329bf2d`). Display names never touch HCS —
+they live in the encrypted 0G archive. Publishing the seat costs no privacy and
+is the difference between a log that hints and a log that proves.
+
+`contribId`, `storageRootHash` and `hederaTxId` are correlation keys, so a reader
+can group two cosigns with their acceptance, or follow a brain update to the 0G
+root it produced. All are ids or hashes. Never content.
+
+**`contrib.accepted` is emitted by the system**, so `actor.seat` is empty on the
+one event the cap table counts — the credited seat comes from its payload. Miss
+that and the whole exercise is pointless.
 
 **Never submit** message content, human names, document text, seat tokens or
 storage keys. The content stays encrypted on 0G; HCS carries only the commitment

@@ -70,6 +70,25 @@ export const createTopic = (env: HederaEnv, memo?: string) =>
  * rather than trusting whatever we send, so content cannot reach HCS even if a
  * caller here passes a full event by mistake (§4.1).
  */
+/**
+ * Correlation keys that may be published. Explicitly whitelisted, and read from
+ * known payload fields rather than spread — the alternative is discovering that
+ * a new payload field went public because nobody remembered to exclude it.
+ */
+function publicRefs(event: MassEvent): Record<string, string | undefined> {
+  const p = (event.payload ?? {}) as Record<string, unknown>;
+  const pick = (k: string) => (typeof p[k] === "string" ? (p[k] as string) : undefined);
+  return {
+    contribId: pick("contribId"),
+    storageRootHash: pick("storageRootHash"),
+    hederaTxId: pick("hederaTxId"),
+    // contrib.accepted is emitted BY THE SYSTEM, so actor.seat is empty — yet
+    // it is the one event the cap table counts. The credited seat lives in its
+    // payload, and without publishing it the cap table stays underivable.
+    seat: pick("seat"),
+  };
+}
+
 export const anchorEvent = (env: HederaEnv, event: MassEvent) =>
   call<{ txId: string; sequenceNumber: string | null }>(env, "submit-event", {
     topicId: env.HEDERA_TOPIC_ID,
@@ -78,6 +97,7 @@ export const anchorEvent = (env: HederaEnv, event: MassEvent) =>
       ts: event.ts,
       type: event.type,
       actor: event.actor,
+      ref: publicRefs(event),
       payloadHash: event.payloadHash,
     },
   });
