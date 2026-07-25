@@ -126,13 +126,13 @@ export const Rail: FC<{
   };
 
   // Become a Signer: Orb / AgentKit delegation to the session agent.
-  const delegate = async () => {
+  const delegate = async (opts: VerifyOptions = {}) => {
     if (verifying || delegating || act.pending) return;
     setDelegating(true);
     act.start("delegate");
     setAuthError(null);
     try {
-      const r = await verify("agentkit");
+      const r = await verify("agentkit", opts);
       send({ kind: "delegate", agentkitToken: r.token });
     } catch (e) {
       setAuthError(e instanceof Error ? e.message : "Orb verification failed");
@@ -291,14 +291,33 @@ export const Rail: FC<{
 
         {/* Builder → Signer via Orb / AgentKit delegation to the session agent. */}
         {me?.tier === "T2" && (
-          <button
-            onClick={delegate}
-            disabled={verifying || delegating}
-            className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-md border border-emerald-700/30 bg-emerald-600/10 py-1.5 text-[12px] text-emerald-900 hover:bg-emerald-600/15 disabled:opacity-40"
-          >
-            <ShieldCheckIcon size={13} />
-            {delegating ? "Verifying with Orb…" : "Become a Signer (Orb)"}
-          </button>
+          <>
+            <button
+              onClick={() => delegate({ environment: "production" })}
+              disabled={verifying || delegating}
+              className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-md border border-emerald-700/30 bg-emerald-600/10 py-1.5 text-[12px] text-emerald-900 hover:bg-emerald-600/15 disabled:opacity-40"
+            >
+              <ShieldCheckIcon size={13} />
+              {delegating ? "Verifying with Orb…" : "Become a Signer (Orb)"}
+            </button>
+            <button
+              onClick={() => delegate({ environment: "staging" })}
+              disabled={verifying || delegating}
+              className="mt-1 w-full rounded-md border border-[#1a1a18]/20 py-1 text-[11px] hover:bg-white/60 disabled:opacity-40"
+            >
+              Orb · simulator (staging)
+            </button>
+            {/* Seat claim had a dev route but delegation did not, so a dev-mode
+                crew could reach Builder and then stall — and co-signing needs
+                two Signers. Both tiers need the same escape hatch. */}
+            <button
+              onClick={() => delegate({ dev: true })}
+              disabled={verifying || delegating}
+              className="mt-1 w-full rounded-md border border-dashed border-amber-600/50 py-1 text-[11px] text-amber-800 hover:bg-amber-500/10 disabled:opacity-40"
+            >
+              Dev bypass — become Signer (unverified)
+            </button>
+          </>
         )}
         {authError && seated && <p className="pt-1 text-[11px] text-red-700">{authError}</p>}
       </Section>
