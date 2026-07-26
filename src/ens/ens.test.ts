@@ -31,14 +31,14 @@ describe("label normalization", () => {
   });
   it("builds names under the parent", () => {
     expect(joinName("alice", env)).toBe("alice.mass.eth");
-    expect(agentName(env)).toBe("docs.mass.eth");
+    expect(agentName(env)).toBe("docswriter.mass.eth");
     expect(agentName({ ...env, ENS_AGENT_LABEL: "writer" })).toBe("writer.mass.eth");
   });
   it("prefers the name this crew gave their agent over the deployment label", () => {
     // ENS_AGENT_LABEL is one value for every session the deployment runs. The
     // subname derived when THIS crew named THIS agent has to win.
     expect(agentName(env, { agentEnsName: "scout.mass.eth" })).toBe("scout.mass.eth");
-    expect(agentName(env, { agentEnsName: undefined })).toBe("docs.mass.eth");
+    expect(agentName(env, { agentEnsName: undefined })).toBe("docswriter.mass.eth");
   });
 });
 
@@ -85,7 +85,7 @@ describe("agent profile assembly", () => {
     session.brainRoot = "0groot";
     const p = assembleAgentProfile(session, { ...env, HEDERA_TOPIC_ID: "0.0.123" });
 
-    expect(p.name).toBe("docs.mass.eth");
+    expect(p.name).toBe("docswriter.mass.eth");
     expect(p.contributionCount).toBe(4);
     expect(p.crewSize).toBe(2);
     // Owners sorted by contributions; resolve to ENS names; shares in bps.
@@ -107,7 +107,7 @@ describe("agent profile assembly", () => {
     const rec = agentTextRecords(p);
     expect(rec["com.mass.role"]).toBeDefined();
     expect(rec["com.mass.owners"]).toContain("alice.mass.eth:10000");
-    expect(rec.url).toBe("/cv/docs.mass.eth");
+    expect(rec.url).toBe("/cv/docswriter.mass.eth");
     expect(rec["com.mass.brainRoot"]).toBeUndefined(); // no brain root set
   });
 });
