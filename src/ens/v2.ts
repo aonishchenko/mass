@@ -92,18 +92,27 @@ export const registryAbi = [
     outputs: [{ type: "address" }],
   },
   {
-    // NOTE the output order: (status, tokenId, latestOwner). Read back-to-front
-    // it decodes cleanly into nonsense — an address that is really the low word
-    // of a token id — so it is written out explicitly here rather than guessed.
+    /**
+     * getState returns a STRUCT, not a list of values, and the field order is
+     * not the obvious one. Guessing it decodes into plausible nonsense — an
+     * address that is really the low word of an expiry — so it is transcribed
+     * here from the deployed contract rather than inferred.
+     */
     type: "function",
     name: "getState",
     stateMutability: "view",
-    inputs: [{ name: "tokenId", type: "uint256" }],
+    inputs: [{ name: "anyId", type: "uint256" }],
     outputs: [
-      { name: "status", type: "uint8" },
-      { name: "tokenId", type: "uint256" },
-      { name: "latestOwner", type: "address" },
-      { name: "expiry", type: "uint64" },
+      {
+        type: "tuple",
+        components: [
+          { name: "status", type: "uint8" },
+          { name: "expiry", type: "uint64" },
+          { name: "latestOwner", type: "address" },
+          { name: "tokenId", type: "uint256" },
+          { name: "resource", type: "uint256" },
+        ],
+      },
     ],
   },
   {

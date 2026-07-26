@@ -136,12 +136,12 @@ const App: React.FC = () => {
       functionName: "getState",
       args: [labelId(PARENT_LABEL)],
     });
-    if (Number(st[0]) !== V2_STATUS_REGISTERED) {
-      say(`${PARENT} is not registered (status ${st[0]})`);
+    if (Number(st.status) !== V2_STATUS_REGISTERED) {
+      say(`${PARENT} is not registered (status ${st.status})`);
       return;
     }
-    setTokenId(st[1]);
-    setOwner(st[2]);
+    setTokenId(st.tokenId);
+    setOwner(st.latestOwner);
 
     const [sub, res] = await Promise.all([
       pub.readContract({
@@ -172,7 +172,7 @@ const App: React.FC = () => {
             functionName: "getState",
             args: [labelId(s.label)],
           });
-          if (Number(state[0]) === V2_STATUS_REGISTERED) found[s.label] = state[2];
+          if (Number(state.status) === V2_STATUS_REGISTERED) found[s.label] = state.latestOwner;
         } catch {
           /* not registered */
         }
