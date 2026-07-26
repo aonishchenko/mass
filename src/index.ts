@@ -104,6 +104,7 @@ export default {
     // /api/ens/* is the M5 identity layer.
     const isVerify = url.pathname.startsWith("/api/verify/");
     const isEns = url.pathname.startsWith("/api/ens/");
+    const isSettlement = url.pathname === "/api/settlement";
     // ENSIP-26/27 discovery. These are the endpoints the agent's own ENS
     // records point at, so they have to be reachable: a record naming a route
     // that 404s is a claim we cannot back, and the whole "resolve the name to
@@ -115,7 +116,8 @@ export default {
       url.pathname === "/api/state" ||
       isVerify ||
       isEns ||
-      isAgent
+      isAgent ||
+      isSettlement
     ) {
       const search = url.searchParams;
       if (!search.get("session")) search.set("session", "default");

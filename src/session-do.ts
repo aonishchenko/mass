@@ -27,6 +27,7 @@ import {
   type Session,
 } from "./core/types.js";
 import { extractCandidates, runInference } from "./zg/inference.js";
+import { rateCardLine, settlementForLastJob } from "./core/settle.js";
 import { writeArchive, writeBrain } from "./zg/storage.js";
 import { mockScreen } from "./world/mock.js";
 import { buildContext } from "./world/context.js";
@@ -208,6 +209,35 @@ export class SessionRoom extends DurableObject<Env> {
     if (url.pathname.endsWith("/verify/log")) return this.handleVerifyLog();
 
     // ENS (M5) — resolve any name, or the agent's live employment record (CV).
+    /**
+     * What the last job WOULD pay each human, and why. Computed from the log;
+     * no transfer is made — see core/settle.ts.
+     */
+    if (url.pathname.endsWith("/settlement")) {
+      const seatOfChunk: Record<string, string> = {};
+      for (const e of this.session.events) {
+        if (e.type !== "contrib.accepted") continue;
+        const p2 = e.payload as { contribId: string; seat: string };
+        seatOfChunk[p2.contribId] = p2.seat;
+      }
+      const st = settlementForLastJob(this.session, capTable(this.session), seatOfChunk);
+      if (!st) return Response.json({ settlement: null, rateCard: rateCardLine() });
+      return Response.json({
+        rateCard: rateCardLine(),
+        settlement: {
+          ...st,
+          amountTinybar: st.amountTinybar.toString(),
+          heldTinybar: st.heldTinybar.toString(),
+          lines: st.lines.map((l) => ({
+            ...l,
+            amountTinybar: l.amountTinybar.toString(),
+            fromUse: l.fromUse.toString(),
+            fromOwnership: l.fromOwnership.toString(),
+          })),
+        },
+      });
+    }
+
     if (url.pathname.endsWith("/ens/resolve")) {
       return Response.json(await resolveName(this.env, url.searchParams.get("name") ?? ""));
     }
@@ -887,6 +917,11 @@ export class SessionRoom extends DurableObject<Env> {
         runId,
         lane,
         text: result.text,
+        // What this answer actually drew on — validated chunk ids, the input
+        // to the 70% use share at settlement. The candidate set goes with it,
+        // so a chunk that was retrieved but not quoted can still earn its floor.
+        usedChunkIds: result.usedChunkIds,
+        candidateChunkIds: result.candidateChunkIds,
         // Present ONLY when the provider actually returned an attestation.
         attestationRef: result.attestationRef,
         // Always true, never a proof: which endpoint/model/response produced it.

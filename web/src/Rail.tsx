@@ -614,6 +614,41 @@ export const Rail: FC<{
       <BrainPanel view={view} />
 
       <Section icon={<DatabaseIcon size={12} />} title={`Who owns ${agentLabel(view)}`}>
+        {/*
+          The one thing everybody asks and nothing on screen answered: where do
+          these percentages come from, and what do they get me? Stated once, in
+          full, rather than implied by a number.
+        */}
+        <details className="group pb-2">
+          <summary className="cursor-pointer list-none text-[11px] text-[var(--color-accent)] hover:underline">
+            How is this calculated?
+          </summary>
+          <div className="space-y-1.5 pt-1.5 text-[11px] leading-snug text-[var(--color-muted)]">
+            <p>
+              <strong className="text-[var(--color-ink)]">Teaching earns a share.</strong>{" "}
+              Every time two signers approve something you taught, it becomes part
+              of {agentLabel(view)} and you earn a share of it.
+            </p>
+            <p className="rounded-md bg-white/60 px-2 py-1 font-mono text-[10.5px] text-[var(--color-ink)]">
+              your share = things you taught ÷ everything it has been taught
+            </p>
+            <p>
+              <strong className="text-[var(--color-ink)]">Being used earns more.</strong>{" "}
+              When {agentLabel(view)} is hired, the fee splits{" "}
+              <strong className="text-[var(--color-ink)]">70% to whoever's knowledge
+              that job actually drew on</strong>, and{" "}
+              <strong className="text-[var(--color-ink)]">30% by the shares above</strong>.
+              So everyone who taught it earns something, and whoever it actually
+              quoted earns most.
+            </p>
+            <p>
+              Nothing here is set by hand. It is counted from the approval log,
+              which is published on Hedera — so anyone can recount it and get the
+              same answer.
+            </p>
+          </div>
+        </details>
+
         {totalContributions === 0 ? (
           <p className="text-[11.5px] leading-snug text-[var(--color-muted)]">
             Nobody owns {agentLabel(view)} yet. Teach it something and your name
@@ -638,7 +673,10 @@ export const Rail: FC<{
                       </span>
                     )}
                   </span>
-                  <span className="shrink-0 tabular-nums">
+                  <span
+                    className="shrink-0 tabular-nums"
+                    title={`${o.name} taught ${o.n} of ${totalContributions} things ${agentLabel(view)} knows, so they own ${o.pct}% of it. When it is hired, they also earn from any job that uses their knowledge.`}
+                  >
                     <strong>{o.pct}%</strong>
                     <span className="text-[var(--color-muted)]">
                       {" "}

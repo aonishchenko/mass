@@ -113,22 +113,38 @@ list. Permissions recompute whenever the crew changes.
 
 Ownership is **computed from the log, never hand-set.**
 
-**What the code does today (v1):**
+**Your share of the agent** — what the ownership panel shows:
 
 ```
-ownership[human] = accepted contributions by that human ÷ all accepted contributions
+your share = things you taught ÷ everything the agent has been taught
 ```
 
-Each accepted contribution is anchored to Hedera with the credited seat and a
-`humanRef` — a truncated hash of that person's World nullifier — so the shares
-can be recomputed from the public topic alone, and are keyed to a verified
-unique human rather than to a display name.
+Counted from `contrib.accepted`, one per thing two signers approved. Each is
+anchored to Hedera with the credited seat and a `humanRef` — a truncated hash of
+that person's World nullifier — so the shares can be recomputed from the public
+topic alone, and are keyed to a verified unique human rather than a display name.
 
-**Next step (specified, not built):** weighting ownership by *authorship* (how
-much of the surviving text you wrote) and *usage* (how often the agent actually
-cites your lines in paid work), at `0.30 × Authorship + 0.70 × Usage`. That
-formula is the design in [`CONTRIBUTING.md`](./CONTRIBUTING.md); the shipped
-code counts accepted contributions and nothing else.
+**When the agent is hired**, the fee splits:
+
+```
+70%  by USE        — whose knowledge that job actually drew on
+30%  by OWNERSHIP  — the shares above
+```
+
+So everyone who taught it earns something, and whoever it actually drew on earns
+most. "Use" is *measured, not asserted*: every chunk enters the prompt with an
+opaque marker, the model repeats the markers it uses, and **every returned marker
+is checked against the set we actually supplied** — an invented citation earns
+nobody anything. Chunks that were retrieved but not cited earn a small floor
+share, so a model that forgets to cite cannot silently zero out a contributor.
+See [`src/core/attribution.ts`](./src/core/attribution.ts).
+
+**Payouts are computed, not executed.** `GET /api/settlement` returns exactly
+what each human would receive for the last job and why, and the UI labels it as
+calculated. No transfer is made: the agent is not live on a marketplace and
+nobody has linked a payout account yet. The design for the real thing —
+self-custody, accrue-then-claim — is in
+[`docs/PAYOUT-DESIGN.md`](./docs/PAYOUT-DESIGN.md).
 
 ### Payment flow (Hedera)
 

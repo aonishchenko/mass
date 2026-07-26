@@ -11,11 +11,8 @@ const HBAR = 100_000_000n;
 
 const base: SplitInput = {
   amountTinybar: 10n * HBAR,
-  citations: [
-    { file: "skills/release-notes.md", lineStart: 1, lineEnd: 8, seat: "alice" },
-    { file: "skills/release-notes.md", lineStart: 12, lineEnd: 20, seat: "alice" },
-    { file: "values.md", lineStart: 3, lineEnd: 4, seat: "bob" },
-  ],
+  // alice's knowledge carried twice the weight of bob's in this job.
+  usage: { alice: 2, bob: 1 },
   capTable: { alice: 2, bob: 1, carol: 1 },
   accounts: { alice: "0.0.1001", bob: "0.0.1002", carol: "0.0.1003" },
 };
@@ -33,11 +30,11 @@ describe("splitPayment — hedera-spec §5.2", () => {
     expect(paid + r.pooledRemainder).toBe(7n * HBAR + 3n);
   });
 
-  it("weights the authorship share by citation count", () => {
+  it("weights the use share by how much each seat was used", () => {
     const r = splitPayment(base);
     const alice = r.transfers.find((t) => t.seat === "alice")!;
     const bob = r.transfers.find((t) => t.seat === "bob")!;
-    // alice: 2 of 3 citations + 2 of 4 cap-table units; bob: 1 and 1.
+    // alice: 2 of 3 usage weight + 2 of 4 cap-table units; bob: 1 and 1.
     expect(alice.amountTinybar).toBeGreaterThan(bob.amountTinybar);
   });
 
@@ -47,10 +44,10 @@ describe("splitPayment — hedera-spec §5.2", () => {
     expect(r.transfers.find((t) => t.seat === "carol")).toBeDefined();
   });
 
-  it("splits 70/30 between citations and holders", () => {
+  it("splits 70/30 between use and ownership", () => {
     const onlyAliceCited: SplitInput = {
       ...base,
-      citations: [{ file: "a.md", lineStart: 1, lineEnd: 2, seat: "alice" }],
+      usage: { alice: 1 },
       capTable: { bob: 1 },
       accounts: { alice: "0.0.1001", bob: "0.0.1002" },
     };
@@ -70,7 +67,7 @@ describe("splitPayment — hedera-spec §5.2", () => {
     }
     const r = splitPayment({
       amountTinybar: 1n * HBAR, // 1 HBAR across 50 seats = 0.02 each
-      citations: [],
+      usage: {},
       capTable: many,
       accounts,
     });
@@ -87,7 +84,7 @@ describe("splitPayment — hedera-spec §5.2", () => {
   });
 
   it("falls back to the cap table when a job cited nothing", () => {
-    const r = splitPayment({ ...base, citations: [] });
+    const r = splitPayment({ ...base, usage: {} });
     // The authorship pot must not be stranded.
     expect(reconciles(r)).toBe(true);
     const paid = r.transfers.reduce((n, t) => n + t.amountTinybar, 0n);
@@ -99,11 +96,12 @@ describe("splitPayment — hedera-spec §5.2", () => {
   });
 
   it("scripted log produces the expected allocation", () => {
-    // Two accepted contributions from alice, one from bob; the job cited only
-    // alice's file. Expected: alice takes all authorship + half the holder pot.
+    // Two accepted contributions from alice, one from bob; this job used only
+    // alice's knowledge. Expected: alice takes the whole use pot plus half the
+    // ownership pot.
     const r = splitPayment({
       amountTinybar: 100n * HBAR,
-      citations: [{ file: "skills/x.md", lineStart: 1, lineEnd: 5, seat: "alice" }],
+      usage: { alice: 1 },
       capTable: { alice: 1, bob: 1 },
       accounts: { alice: "0.0.1001", bob: "0.0.1002" },
     });

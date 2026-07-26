@@ -36,20 +36,17 @@ A commit without a valid `Verified-Human` trailer cannot be merged.
 | `PERSONALITY.md` | `CAPTABLE/**` |
 | `VOICE.md` | `OPS/**`, `CHANGELOG.md` |
 
-**Ownership today (v1, what the code does):** your share is your accepted
-contributions divided by all accepted contributions. Every acceptance is
-anchored to Hedera with a `humanRef` — a truncated hash of your World nullifier
-— so the split can be recomputed from the public topic and is keyed to a
-verified unique human, not to a display name.
+**Your share of the agent** is your accepted contributions divided by all
+accepted contributions. Every acceptance is anchored to Hedera with a `humanRef`
+— a truncated hash of your World nullifier — so the split can be recomputed from
+the public topic and is keyed to a verified unique human, not a display name.
 
-**Designed, not yet built:** weighting that share by
-`0.30 × Authorship + 0.70 × Usage`, where
-- **Authorship** is how much of the surviving text in the earning files you
-  wrote (format-only changes would not count), and
-- **Usage** is how often the agent actually cites your lines in paid work.
+**When the agent is hired**, the fee splits **70% by use** (whose knowledge that
+job actually drew on) and **30% by ownership** (the shares above). Use is
+measured server-side and validated against the knowledge actually supplied to the
+model, so a citation the model invents earns nobody anything.
 
-Treat that formula as the roadmap. The shipped code counts accepted
-contributions and nothing else, and there is no authorship tooling yet.
+Payouts are **computed and shown, not executed** — see `docs/PAYOUT-DESIGN.md`.
 
 ## House rules for knowledge units
 - One idea per paragraph. Units are cited by line range, so keep lines meaningful.
