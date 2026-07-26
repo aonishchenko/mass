@@ -48,7 +48,17 @@ export function usePending(view: SessionView) {
     [pending, start]
   );
 
-  return { pending, start, guard, isPending: (key: string) => pending === key };
+  /**
+   * Clear the latch after a failure that produced no event.
+   *
+   * The latch normally clears when the server appends something. An action that
+   * fails entirely in the browser — a rejected wallet signature, say — never
+   * gets that far, so without this every button stays dead for the full 12s
+   * timeout and the app looks hung right after telling you what went wrong.
+   */
+  const cancel = useCallback(() => setPending(null), []);
+
+  return { pending, start, cancel, guard, isPending: (key: string) => pending === key };
 }
 
 /** Progressive disclosure: long lists start at 10 and grow on demand. */

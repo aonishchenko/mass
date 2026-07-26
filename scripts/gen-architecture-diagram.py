@@ -1,12 +1,23 @@
 #!/usr/bin/env python3
 """
-Diagram 1 — the detailed architecture.
+The MASS architecture diagram.
 
-The engineering view: named components, the request path, and the constraints
-that forced the shape (single writer, the sidecar, hash-before-seq). For the
-version to show someone in the first thirty seconds, see
-gen-architecture-simple.py — both draw from scripts/diagram_kit.py so they stay
-siblings rather than drifting apart.
+Every arrow corresponds to a call that exists in the code, and the layout was
+chosen so those real dependencies are short lines rather than a hairball:
+
+  browser  -> worker              web/src/session.ts   (WS + /api)
+  worker   -> auth                src/session-do.ts    (/verify/* handlers)
+  worker   -> session room        src/index.ts         (env.SESSION.getByName)
+  auth     -> World / ENS         src/world/verify.ts, src/ens/*.ts
+  room     -> LLM harness         src/zg/inference.ts
+  room     -> cap table           src/core/reduce.ts   capTable()
+  room     -> ledger              src/session-do.ts    emit() anchors each event
+  harness  -> attribution         src/core/attribution.ts (chunks actually used)
+  harness  -> 0G Router           direct HTTPS from the Worker, no sidecar
+  captable -> payout              src/hedera/split.ts  (the 30% ownership leg)
+  attrib   -> payout              src/hedera/split.ts  (the 70% use leg)
+  ledger   -> sidecar -> Hedera   services/zg-storage/hedera.mjs (SDK needs gRPC)
+  attrib   -> sidecar -> 0G       services/zg-storage/index.mjs  (Storage SDK)
 
 Regenerate:  python3 scripts/gen-architecture-diagram.py
 """
@@ -24,102 +35,108 @@ OUT = os.path.join(
 
 c = Canvas(
     1840,
-    1140,
+    1150,
     "MASS system architecture",
-    "How a MASS session runs: verified humans in a browser, one Durable Object "
-    "per session holding the event log, inference and archive on 0G, provenance "
-    "and payroll on Hedera, personhood from World, and identity from ENS.",
+    "How MASS runs: a browser client, an AI Sessions Engine built on Cloudflare "
+    "Workers and Durable Objects, and four onchain layers — World for "
+    "personhood, ENS for identity, 0G for inference and archive, Hedera for "
+    "provenance and payouts.",
 )
 
 c.header(
-    "MASS — System Architecture",
-    "Verified humans build one agent together. Every contribution is signed, anchored, and owned — and the payroll follows the same log.",
+    "MASS — How It Works",
+    "Verified humans build one agent together. Every contribution is signed, anchored, and owned — and the payout follows the same log.",
 )
 
-# ---------------------------------------------------------------- 1. Crew
-c.group(50, 150, 300, 400, "CREW")
-c.box(80, 196, 240, 106, "Verified human", "One seat per person.\nSigner · Builder · Observer", "amberBox")
-c.box(80, 322, 240, 92, "Wallet holder", "ENS name as login.\nMay co-sign; not\nsybil-checked.", "plain", dy=18)
-c.box(80, 434, 240, 92, "Client / employer", "Hires the agent,\npays per job.", "plain")
+# --------------------------------------------------------- Browser client
+c.group(50, 150, 380, 620, "BROWSER CLIENT", "React", "groupClient")
+c.box(78, 230, 324, 116, "Session thread", "Everyone talks to the same\nagent, in one conversation.", "blueBox")
+c.box(78, 364, 324, 116, "Crew rail", "Who is here, what tier they\nhold, what just happened.", "blueBox")
+c.box(78, 498, 324, 116, "Review sheet", "Where a contribution is\nproposed and co-signed.", "blueBox")
+c.box(78, 632, 324, 116, "Live evidence",
+      "Ledger ticker, agent CV, cap\ntable — refreshing on their own.", "blueBox")
 
-# ------------------------------------------------------------- 2. Browser
-c.group(400, 150, 400, 626, "BROWSER  ·  React + assistant-ui", "", "groupClient")
-c.box(430, 190, 340, 116, "Session thread", "Streaming chat. Token deltas\nnever touch the event log.", "blueBox")
-c.box(430, 322, 340, 116, "Crew rail", "Live seats, tiers, event feed,\nHCS ticker with HashScan links.", "blueBox")
-c.box(430, 454, 340, 116, "Review sheet", "Mid- and end-session harvest.\nTwo signers merge a contribution.", "blueBox")
-# Standalone pages — same browser, different job. They exist outside a
-# session, so they get their own frame rather than sitting in the session UI.
-c.out.append('<rect class="dashed" x="424" y="588" width="352" height="164"/>')
-c.text(440, 612, "STANDALONE PAGES  ·  no session, no seat", "tiny")
-c.box(438, 624, 324, 56, "Agent CV  /cv/<name>", "", "plain")
-c.box(438, 690, 324, 56, "Subname console  /ens-admin", "", "plain")
+# ------------------------------------------------------ AI Sessions Engine
+c.group(470, 150, 860, 730, "AI SESSIONS ENGINE", "Cloudflare Workers + Durable Objects", "groupCore")
 
-# ---------------------------------------------------------------- 3. Core
-c.group(850, 150, 470, 620, "CLOUDFLARE  ·  edge", "", "groupCore")
-c.box(880, 196, 410, 86, "Worker", "Routes /api and /ws · serves the SPA", "plain")
-c.out.append('<rect class="box" x="880" y="306" width="410" height="330"/>')
-c.text(1085, 338, "Durable Object — SessionRoom", "smallLabel", "middle")
-c.text(1085, 360, "One per session. The single writer.", "tiny", "middle")
+L, R, BW, BH = 496, 910, 390, 118
+r1, r2, r3, r4 = 230, 364, 498, 632
 
-c.box(902, 380, 176, 118, "Event log", "Append-only.\nHashed before it\ntakes a sequence\nnumber.", "plain", "smallLabel", "tiny", dy=19, pad=16)
-c.box(1094, 380, 176, 118, "Replay", "Deterministic fold.\nNo clock, no\nrandomness,\nno I/O.", "plain", "smallLabel", "tiny", dy=19, pad=16)
-c.box(902, 512, 176, 108, "Authority", "Tier decides who\nmay run canonical,\nand who may sign.", "plain", "smallLabel", "tiny", dy=19, pad=16)
-c.box(1094, 512, 176, 108, "Attribution", "Which chunks an\nanswer used — the\npayroll input.", "plain", "smallLabel", "tiny", dy=19, pad=16)
+c.logoBox(L, r1, BW, BH, [], "CF Worker",
+          "Routes the API and the live socket, serves the\nclient, and hands each session to its own\nsingle writer.")
+c.logoBox(R, r1, BW, BH, ["world", "ens"], "Auth",
+          "World proves a unique human. ENS gives every\nseat a name that resolves outside our app.")
 
-c.box(880, 662, 410, 88, "Node sidecar  ·  Railway", "0G Storage and the Hedera SDK need gRPC and\nNode internals a Worker cannot give them.", "amberBox")
+c.logoBox(L, r2, BW, BH, [], "Session Room",
+          "One per session. An append-only event log —\nevery view of the session is a fold over it,\nand nothing else may write.")
+c.logoBox(R, r2, BW, BH, ["zg"], "LLM harness",
+          "Runs every answer on the 0G Router in a trusted\nenclave, framed by what the crew has taught.")
 
-# ------------------------------------------------------------- 4. Web3
-c.group(1370, 150, 420, 940, "WEB3  ·  what the app cannot fake alone", "", "groupChain")
+c.logoBox(L, r3, BW, BH, [], "Cap table",
+          "Ownership derived from accepted contributions.\nNever hand-set — it is a fold over the log.")
+c.logoBox(R, r3, BW, BH, ["zg"], "Attribution + storage",
+          "Measures which knowledge an answer actually\nused, and archives the whole session to 0G.")
 
-c.chainCard(1396, 196, 368, 196, "world", "World", "Proof of personhood  ·  seat.claimed",
-          "Selfie Check proof, verified\nserver-side. One human, one seat.\nSybil score sets the tier — a\nwallet signature never can.")
-c.chainCard(1396, 414, 368, 196, "ens", "ENS", "Identity and provenance  ·  live resolve",
-          "Every seat and the agent get a\nsubname. Citations resolve live;\na name that fails to resolve is\nshown as unverified, not hidden.")
-c.chainCard(1396, 632, 368, 196, "zg", "0G", "Inference and archive  ·  TEE run",
-          "Router runs every answer in a TEE\ntrust mode. Storage holds the full\nsession archive — the brain keeps\nonly what the crew accepted.")
-c.chainCard(1396, 850, 368, 214, "hedera", "Hedera", "Provenance and payroll  ·  anchor + payout",
-          "HCS anchors a hash of each event —\nhashes only, never content. HTS\nand HBAR transfers settle a job:\n70% follows use, 30% ownership.\nMirror Node feeds the live ticker.")
+c.logoBox(L, r4, BW, BH, ["hedera"], "Ledger",
+          "Anchors a hash of each event to the public\nledger — hashes only, never the content.")
+c.logoBox(R, r4, BW, BH, ["hedera"], "Payout engine",
+          "Splits a job 70% by what it used, 30% by who\nowns it, in whole units that reconcile exactly.")
 
-# ------------------------------------------------------------ 5. Bottom
-c.group(50, 830, 1290, 238, "THE LOOP  ·  what a contribution goes through")
+c.logoBox(496, 766, 804, 92, [], "Node sidecar",
+          "The two SDKs that cannot run on the edge: Hedera needs gRPC, 0G Storage needs Node internals.")
 
-steps = [
-    ("Talk", "Anyone chats.\nNothing is\ntaught yet."),
-    ("Harvest", "Extraction filters\nfor durable\nknowledge only."),
-    ("Sign", "Two verified\nhumans merge\nthe contribution."),
-    ("Brain", "Chunk enters the\nbrain and the\ncap table."),
-    ("Cite", "Answers cite the\nchunk and the\nhuman behind it."),
-    ("Pay", "Job settles along\nuse + ownership."),
-]
-sx, sw, gap = 86, 190, 16
-for i, (t, b) in enumerate(steps):
-    x = sx + i * (sw + gap)
-    c.box(x, 878, sw, 118, t, b, "plain", "smallLabel", "tiny", dy=19, pad=18)
-    if i < len(steps) - 1:
-        c.arrow([(x + sw + 2, 937), (x + sw + gap - 4, 937)])
+# -------------------------------------------------------------- Onchain
+c.group(1370, 150, 420, 930, "ONCHAIN", "what the app cannot vouch for alone", "groupChain")
 
-c.text(86, 1034, "The archive keeps everything. The brain keeps only what was accepted — that gap is the product, not a limitation.", "body")
+c.chainCard(1396, 226, 368, 190, "world", "World", "Proof of personhood",
+            "Verifies that a seat is a real,\nunique person — the thing a\nwallet signature can never show.")
+c.chainCard(1396, 434, 368, 190, "ens", "ENS", "Identity and provenance",
+            "Names every seat and the agent.\nCitations resolve live, so a claim\ncan be checked outside MASS.")
+c.chainCard(1396, 642, 368, 190, "zg", "0G", "Inference and archive",
+            "Runs the model in a trusted\nenclave and keeps the full\nsession archive.")
+c.chainCard(1396, 850, 368, 208, "hedera", "Hedera", "Provenance and payouts",
+            "Timestamps the log so the order\nof contributions is not ours to\nedit, and settles the money that\nfollows it.")
 
-# ----------------------------------------------------------- 6. Flows
-# Crew -> browser
-c.arrow([(320, 243), (428, 243)])
-# Browser -> worker (WS)
-c.arrow([(772, 248), (878, 239)])
-c.tag(786, 196, "1 · WebSocket intents")
-# Worker -> DO
-c.arrow([(1085, 284), (1085, 304)], "flow")
-# DO -> browser (deltas)
-c.arrow([(878, 420), (774, 382)], "flow")
-c.tag(786, 330, "2 · token deltas")
+# ---------------------------------------------------------------- Flows
+LC, RC = L + BW / 2, R + BW / 2  # column centres
 
-# World -> worker
-c.arrow([(1394, 262), (1292, 240)], "flowGreen", "arrowGreen")
-# ENS <-> DO
-c.arrow([(1394, 486), (1292, 452)], "flowGreen", "arrowGreen")
-# 0G <-> DO
-c.arrow([(1394, 700), (1294, 618)], "flowGreen", "arrowGreen")
-# sidecar -> hedera / 0g storage
-c.arrow([(1290, 706), (1394, 730)], "flowAmber", "arrowAmber")
-c.arrow([(1290, 716), (1394, 900)], "flowAmber", "arrowAmber")
+# Browser <-> Worker: intents out, answers back.
+c.arrow([(432, 264), (494, 264)])
+c.arrow([(494, 312), (432, 312)])
+
+# The Worker verifies sideways and hands everything else to the single writer.
+c.arrow([(L + BW + 2, r1 + BH / 2), (R - 4, r1 + BH / 2)])
+c.arrow([(LC, r1 + BH + 2), (LC, r2 - 4)])
+
+# The room drives inference; the log derives the cap table.
+c.arrow([(L + BW + 2, r2 + BH / 2), (R - 4, r2 + BH / 2)])
+c.arrow([(LC, r2 + BH + 2), (LC, r3 - 4)])
+
+# Attribution measures what the harness actually put in front of the model.
+c.arrow([(RC, r2 + BH + 2), (RC, r3 - 4)])
+
+# Both legs of the split feed the payout engine: ownership from the cap table,
+# use from attribution.
+c.arrow([(L + BW + 2, r3 + BH - 24), (R - 4, r4 + 34)])
+c.arrow([(RC, r3 + BH + 2), (RC, r4 - 4)])
+
+# The room anchors its own events. Routed down the outer margin so the line does
+# not cut through the two boxes that sit between them.
+c.arrow([(L - 4, r2 + BH / 2), (482, r2 + BH / 2), (482, r4 + BH / 2), (L - 6, r4 + BH / 2)])
+
+# Everything that writes to a chain from a real SDK goes out through the sidecar.
+c.arrow([(LC, r4 + BH + 2), (LC, 762)], "flowAmber", "arrowAmber")
+c.arrow([(RC, r4 + BH + 2), (RC, 762)], "flowAmber", "arrowAmber")
+
+# Engine -> chains.
+c.arrow([(R + BW + 2, r1 + 42), (1394, 300)], "flowGreen", "arrowGreen")   # Auth -> World
+c.arrow([(R + BW + 2, r1 + 92), (1394, 492)], "flowGreen", "arrowGreen")   # Auth -> ENS
+c.arrow([(R + BW + 2, r2 + 74), (1394, 700)], "flowGreen", "arrowGreen")   # harness -> 0G Router
+c.arrow([(1302, 796), (1394, 776)], "flowGreen", "arrowGreen")             # sidecar -> 0G Storage
+c.arrow([(1302, 830), (1394, 912)], "flowGreen", "arrowGreen")             # sidecar -> Hedera
+
+c.text(50, 1128,
+       "The archive keeps everything. The brain keeps only what the crew accepted — that gap is the product, not a limitation.",
+       "body")
 
 c.save(OUT)

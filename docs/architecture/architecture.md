@@ -1,26 +1,13 @@
 # Architecture
 
-Two views of the same system. Start with the simplified one; drop to the
-detailed one when you need names rather than jobs.
-
-### Simplified — what MASS does
-
 <p align="center">
-  <img src="./assets/architecture-simplified.svg" alt="Simplified MASS architecture: a human authenticates with World or ENS, works in a browser client, and the AI Sessions Engine runs inference on 0G, anchors the log to Hedera, and settles payouts by contribution and use" width="100%">
+  <img src="./assets/architecture-system.svg" alt="MASS architecture: a browser client, an AI Sessions Engine on Cloudflare Workers and Durable Objects, and four onchain layers — World for personhood, ENS for identity, 0G for inference and archive, Hedera for provenance and payouts" width="100%">
 </p>
 
-### Detailed — how it is built
-
-<p align="center">
-  <img src="./assets/architecture-system.svg" alt="Detailed MASS architecture: crew, browser, Cloudflare Worker and Durable Object internals, the Railway sidecar, and the four onchain layers — World, ENS, 0G and Hedera" width="100%">
-</p>
-
-Both are generated, not drawn, and share [`scripts/diagram_kit.py`](../../scripts/diagram_kit.py)
-so they cannot drift into different palettes or stale logos. Regenerate after
-changing the system:
+Generated, not drawn — every arrow corresponds to a call that exists in the
+code, and the generator lists which one. Regenerate after changing the system:
 
 ```bash
-python3 scripts/gen-architecture-simple.py
 python3 scripts/gen-architecture-diagram.py
 ```
 

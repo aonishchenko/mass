@@ -499,7 +499,10 @@ export const Rail: FC<{
                   const r = await loginWithWallet(sessionId);
                   send({ kind: "claimSeat", name: name.trim(), selfieToken: r.token });
                 } catch (e) {
-                  setAuthError(e instanceof Error ? e.message : "Wallet sign-in failed");
+                  // loginWithWallet already turns provider rejections into a
+                  // readable Error; anything else still has to say something.
+                  setAuthError(e instanceof Error ? e.message : String(e));
+                  act.cancel();
                 }
               }}
               disabled={!name.trim() || verifying || !!act.pending}

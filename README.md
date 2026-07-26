@@ -73,11 +73,11 @@ Everything else (delegation, mandates, audit trails, iNFT minting) is
 ## How it works
 
 <p align="center">
-  <img src="docs/architecture/assets/architecture-simplified.svg" alt="Simplified MASS architecture: a human authenticates with World or ENS, works in a browser client, and the AI Sessions Engine runs inference on 0G, anchors the log to Hedera, and settles payouts by contribution and use" width="100%">
+  <img src="docs/architecture/assets/architecture-system.svg" alt="MASS architecture: a browser client, an AI Sessions Engine on Cloudflare Workers and Durable Objects, and four onchain layers — World for personhood, ENS for identity, 0G for inference and archive, Hedera for provenance and payouts" width="100%">
 </p>
 
 A session is one Durable Object — a single writer, so the order of events is a
-fact rather than an agreement. The detailed diagram and full walkthrough are in
+fact rather than an agreement. Full walkthrough:
 [`docs/architecture/architecture.md`](./docs/architecture/architecture.md).
 
 ### The agent is a repository (git-native)
