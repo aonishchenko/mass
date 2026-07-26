@@ -17,6 +17,10 @@ export type ContribSource = "composer" | "draft" | "harvest";
 export type EventType =
   | "session.created"
   | "session.named"
+  // M5 ENS write path — a name that actually exists on-chain, and the records
+  // published on it. Emitted only on a confirmed transaction.
+  | "ens.registered"
+  | "ens.records.written"
   | "seat.claimed"
   | "seat.left"
   | "seat.rejoined"

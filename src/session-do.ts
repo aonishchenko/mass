@@ -38,6 +38,7 @@ import {
   verifyWorldProof,
   type VerifyKind,
 } from "./world/verify.js";
+import { registerSubname, registrarConfigured, writeTextRecords } from "./ens/registrar.js";
 import {
   agentCard,
   agentTextRecords,
@@ -112,8 +113,20 @@ export class SessionRoom extends DurableObject<Env> {
   private candidates: Candidate[] = [];
   /** Single write queue — storage never blocks acceptance (§8.2). */
   private brainQueue: Promise<void> = Promise.resolve();
+  /**
+   * Chain writes for ENS names. Serialized for the same reason as the brain
+   * queue: one nonce, one signer. A seat is usable the instant it is claimed —
+   * its name landing on-chain is never something a human waits for.
+   */
+  private ensQueue: Promise<void> = Promise.resolve();
   /** Seat that asked to close, waiting on an auto-opened harvest to resolve. */
   private pendingClose: Seat | null = null;
+  /**
+   * Last public origin seen on a request. closeSession has no URL of its own,
+   * but the records it publishes are URLs strangers must fetch — so the origin
+   * is remembered rather than guessed.
+   */
+  private lastOrigin: string | null = null;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -172,6 +185,8 @@ export class SessionRoom extends DurableObject<Env> {
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
+    const carried = url.searchParams.get("origin");
+    if (carried) this.lastOrigin = carried;
 
     if (url.pathname.endsWith("/state")) {
       return Response.json({
@@ -687,7 +702,11 @@ export class SessionRoom extends DurableObject<Env> {
     const seatId = newId("s");
     // Assign a unique ENS subname now (M5) so the seat has a resolvable identity
     // from the first event — zero hex anywhere in the UI.
-    const ensName = joinName(uniqueSeatLabel(name, this.takenLabels()), this.env);
+    const label = uniqueSeatLabel(name, this.takenLabels());
+    const ensName = joinName(label, this.env);
+    // Issue it for real, in the background. Derivation is not issuance: without
+    // this the name is only ever a string we print.
+    this.queueSubname(label, ensName);
     await this.emit("seat.claimed", { seat: seatId, name, tier: "T1", ensName }, { system: true });
 
     // Sybil score gates capability (HARD REQUIREMENT 2): below threshold the seat
@@ -1089,6 +1108,58 @@ export class SessionRoom extends DurableObject<Env> {
     return (await hashOf(nullifier)).slice(0, 16);
   }
 
+  /**
+   * Register a seat's subname on-chain, then publish what we know about it.
+   * Failure is logged and dropped: a name that did not land is a name the UI
+   * shows as unverified, which is honest — it is not a reason to fail a seat.
+   */
+  private queueSubname(label: string, ensName?: string) {
+    if (!ensName || !registrarConfigured(this.env)) return;
+    this.ensQueue = this.ensQueue.then(async () => {
+      const r = await registerSubname(this.env, label);
+      if (r.error) {
+        console.error("[ens] register failed", label, r.error.slice(0, 160));
+        return;
+      }
+      if (r.alreadyRegistered) {
+        console.log("[ens] already registered", ensName);
+        return;
+      }
+      console.log("[ens] registered", ensName, r.txHash);
+      await this.emit(
+        "ens.registered",
+        { name: ensName, label, txHash: r.txHash },
+        { system: true }
+      );
+    });
+  }
+
+  /**
+   * Publish the agent's ENSIP-25/26/27 records on its name. Called at the Birth,
+   * when the record set is finally true: the cap table is final and the brain
+   * root exists.
+   */
+  private queueAgentRecords(origin: string) {
+    const profile = assembleAgentProfile(this.session, this.env);
+    if (!profile.name || !registrarConfigured(this.env)) return;
+    const records = agentTextRecords(profile, { origin, registration: registration(this.env) });
+
+    this.ensQueue = this.ensQueue.then(async () => {
+      const { written, failed } = await writeTextRecords(this.env, profile.name!, records);
+      if (Object.keys(failed).length) {
+        console.error("[ens] records failed", Object.keys(failed).join(","));
+      }
+      if (written.length) {
+        console.log("[ens] wrote records", written.join(","));
+        await this.emit(
+          "ens.records.written",
+          { name: profile.name, keys: written },
+          { system: true }
+        );
+      }
+    });
+  }
+
   private queueBrainWrite(contribId?: string) {
     this.brainQueue = this.brainQueue.then(async () => {
       const chunks = this.session.brainChunks;
@@ -1347,5 +1418,10 @@ export class SessionRoom extends DurableObject<Env> {
       { capTable: capTable(this.session) },
       { seat: seat.seat, tier: seat.tier }
     );
+
+    // The Birth is the first moment the record set is actually TRUE: the cap
+    // table is final and the brain root exists. Publishing earlier would put a
+    // half-finished ownership list on a public name.
+    if (this.lastOrigin) this.queueAgentRecords(this.lastOrigin);
   }
 }
