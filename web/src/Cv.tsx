@@ -33,7 +33,13 @@ interface Profile {
 interface CvResponse {
   profile: Profile;
   records: Record<string, string>;
-  resolved: { verified: boolean; dev: boolean; error?: string };
+  resolved: {
+    verified: boolean;
+    dev: boolean;
+    error?: string;
+    /** Live text records — the ONLY source for the hire block. */
+    records?: Record<string, string>;
+  };
 }
 
 const pct = (bps: number) => `${(bps / 100).toFixed(1)}%`;
@@ -59,6 +65,20 @@ export function Cv({ name }: { name: string }) {
   if (!data) return <Shell><p className="text-[var(--color-muted)]">Resolving {name}…</p></Shell>;
 
   const { profile: p, resolved } = data;
+
+  /**
+   * The hire block reads ENS ONLY.
+   *
+   * Everything else on this page can fall back to session state, but hiring
+   * must not: the product claim is that resolving the agent's name is how an
+   * outsider engages it. If these records are absent the honest answer is "this
+   * agent is not hireable yet", not a rate card assembled from our own memory —
+   * which would work identically with ENS switched off.
+   */
+  const rec = resolved.records ?? {};
+  const hireable = rec["com.mass.availability"] === "for-hire";
+  const rateCard = rec["com.mass.rateCard"];
+  const endpoint = rec["agent-endpoint[a2a]"] ?? rec["agent-endpoint[web]"];
   if (!p.name) {
     return (
       <Shell>
@@ -87,12 +107,12 @@ export function Cv({ name }: { name: string }) {
           </span>
           <span
             className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
-              p.availability === "for-hire"
+              hireable
                 ? "bg-sky-600/15 text-sky-800"
                 : "bg-[#1a1a18]/8 text-[var(--color-muted)]"
             }`}
           >
-            {p.availability === "for-hire" ? "for hire" : "in session"}
+            {hireable ? "for hire" : "in session"}
           </span>
         </div>
         <p className="pt-1 text-[15px] text-[var(--color-ink)]">{p.role}</p>
@@ -103,6 +123,43 @@ export function Cv({ name }: { name: string }) {
           </p>
         )}
       </header>
+
+      {/* Hire — rendered from ENS resolution ONLY (see note above). */}
+      <Field label="Hire this agent">
+        {hireable ? (
+          <div className="space-y-1.5 text-[13px]">
+            <p className="text-[var(--color-muted)]">
+              Discovered by resolving <span className="font-mono">{p.name}</span> — no
+              account with us required.
+            </p>
+            {rateCard && (
+              <p>
+                <span className="text-[var(--color-muted)]">rate · </span>
+                {rateCard}
+              </p>
+            )}
+            {endpoint && (
+              <p className="break-all">
+                <span className="text-[var(--color-muted)]">endpoint · </span>
+                <a className="text-[var(--color-accent)] hover:underline" href={endpoint}>
+                  {endpoint}
+                </a>
+              </p>
+            )}
+            {!rateCard && !endpoint && (
+              <p className="text-[var(--color-muted)]">
+                Available, but no rate card or endpoint published yet.
+              </p>
+            )}
+          </div>
+        ) : (
+          <p className="text-[13px] text-[var(--color-muted)]">
+            Not hireable. <span className="font-mono">com.mass.availability</span> is not
+            set to <span className="font-mono">for-hire</span> on this name, so there is
+            nothing to engage — hiring runs through ENS, not through this page.
+          </p>
+        )}
+      </Field>
 
       <Field label="Skills">
         <div className="flex flex-wrap gap-1.5">

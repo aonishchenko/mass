@@ -327,6 +327,17 @@ function devResolve(name: string): ResolvedName {
   return { name, address: addr, verified: true, records: {}, dev: true };
 }
 
+/**
+ * Records read on every resolve.
+ *
+ * Two groups, both load-bearing rather than decorative:
+ *  - SEAT records let a citation be resolved to a provenance claim (who this
+ *    human is, how strongly verified, how much they have contributed) instead
+ *    of being a name we stored ourselves and could have made up.
+ *  - HIRE records are how an outsider engages the agent without our app: the
+ *    rate card and the A2A endpoint come from ENS, so resolution is the
+ *    discovery mechanism, not a lookup we happen to offer.
+ */
 const TEXT_KEYS = [
   "description",
   "url",
@@ -338,6 +349,17 @@ const TEXT_KEYS = [
   "com.mass.hcs.topic",
   "com.mass.capTable.token",
   "com.mass.owners",
+  // seat provenance
+  "com.mass.tier",
+  "com.mass.sybilBand",
+  "com.mass.contribCount",
+  "com.mass.session",
+  "com.mass.world.nullifier",
+  // hiring
+  "com.mass.rateCard",
+  "agent-context",
+  "agent-endpoint[web]",
+  "agent-endpoint[a2a]",
 ];
 
 /**

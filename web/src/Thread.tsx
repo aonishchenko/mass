@@ -10,6 +10,7 @@ import {
   ThreadPrimitive,
   useMessage,
 } from "@assistant-ui/react";
+import { ResolvedName } from "./ResolvedName";
 import { ArrowUpIcon, ShieldCheckIcon, SproutIcon, XIcon, ZapIcon } from "lucide-react";
 import type { FC, ReactNode } from "react";
 import Markdown from "react-markdown";
@@ -21,6 +22,10 @@ import { agentLabel } from "./Brain";
 const CITATION = /(\(per [^)]*'s contribution #\d+\))/g;
 const IS_CITATION = /^\(per .*'s contribution #\d+\)$/;
 
+/** Pulls the ENS name back out of "(per name's contribution #3)". */
+const citedName = (citation: string) =>
+  citation.replace(/^\(per\s+/, "").replace(/'s contribution #\d+\)$/, "").trim();
+
 /** Highlights (per <name>'s contribution #<n>) so the claim is visible. */
 export const CitedText: FC<{ text: string }> = ({ text }) => {
   const parts = text.split(CITATION);
@@ -28,9 +33,10 @@ export const CitedText: FC<{ text: string }> = ({ text }) => {
     <>
       {parts.map((p, i) =>
         IS_CITATION.test(p) ? (
-          <span key={i} className="citation" title="cited from the agent's brain">
+          // The cited name is RESOLVED, not trusted. See ResolvedName.
+          <ResolvedName key={i} name={citedName(p)}>
             {p}
-          </span>
+          </ResolvedName>
         ) : (
           <span key={i}>{p}</span>
         )
