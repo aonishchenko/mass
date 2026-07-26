@@ -317,6 +317,15 @@ export interface ResolvedName {
   verified: boolean;
   records: Record<string, string>;
   dev: boolean;
+  /**
+   * The resolver contract answering for this name, when it has one.
+   *
+   * Worth returning rather than making people open a block explorer: on ENS v2
+   * every name gets its own resolver proxy, so this address is the thing you
+   * write records to — and "which resolver?" is the first question any subname
+   * or Durin setup asks.
+   */
+  resolver?: string;
   error?: string;
 }
 
@@ -387,6 +396,15 @@ export async function resolveName(env: EnsEnv, name: string): Promise<ResolvedNa
       verified = primary?.toLowerCase() === name.toLowerCase();
     }
 
+    // Not fatal if it fails: a name can resolve an address through a parent's
+    // wildcard resolver without one of its own.
+    let resolver: string | undefined;
+    try {
+      resolver = await client.getEnsResolver({ name });
+    } catch {
+      /* no resolver of its own */
+    }
+
     const records: Record<string, string> = {};
     for (const key of TEXT_KEYS) {
       try {
@@ -397,7 +415,7 @@ export async function resolveName(env: EnsEnv, name: string): Promise<ResolvedNa
       }
     }
 
-    return { name, address: address ?? null, verified, records, dev: false };
+    return { name, address: address ?? null, verified, records, resolver, dev: false };
   } catch (err) {
     return {
       name,
