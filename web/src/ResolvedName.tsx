@@ -20,6 +20,13 @@ interface Resolved {
   verified: boolean;
   dev: boolean;
   records: Record<string, string>;
+  /** Which network answered: "mainnet" is the seat's own name, "parent" is ours. */
+  chain?: "parent" | "mainnet";
+  /**
+   * The crew subname we issued for this seat, when the cited name is their own.
+   * Two names because they assert different things — see below.
+   */
+  crew?: Resolved;
   error?: string;
 }
 
@@ -66,10 +73,20 @@ export const ResolvedName: FC<{ name: string; children: React.ReactNode }> = ({
     };
   }, [name]);
 
-  const rec = r?.records ?? {};
+  /**
+   * Identity comes from the cited name; crew claims come from ours.
+   *
+   * We cannot write "tier T3, four contributions" onto a name we do not own, so
+   * when someone arrives with their own name those records live on the subname
+   * we issued them. Reading provenance off the wrong name would either show
+   * nothing or, worse, show whatever a stranger chose to publish.
+   */
+  const provenance = r?.crew ?? r;
+  const rec = provenance?.records ?? {};
   const tier = rec["com.mass.tier"];
   const band = rec["com.mass.sybilBand"];
   const count = rec["com.mass.contribCount"];
+  const ownName = r?.chain === "mainnet";
 
   return (
     <span className="relative inline-block">
@@ -94,6 +111,11 @@ export const ResolvedName: FC<{ name: string; children: React.ReactNode }> = ({
           {r.verified ? (
             <span className="block pt-1 text-emerald-800">
               ✓ resolves live · forward and reverse agree
+              {ownName && " · their own name, not ours"}
+            </span>
+          ) : r.address ? (
+            <span className="block pt-1 text-[var(--color-muted)]">
+              resolves to an address, but is not their primary name
             </span>
           ) : (
             <span className="block pt-1 text-amber-800">
@@ -106,10 +128,15 @@ export const ResolvedName: FC<{ name: string; children: React.ReactNode }> = ({
               {tier && <span className="block">tier · {tier}</span>}
               {band && <span className="block">uniqueness · {BAND_LABEL[band] ?? band}</span>}
               {count && <span className="block">contributions · {count}</span>}
+              {r.crew && (
+                <span className="block pt-1 font-mono text-[10.5px] break-all">
+                  via {r.crew.name}
+                </span>
+              )}
             </span>
           )}
 
-          {r.verified && !tier && !band && !count && (
+          {(r.verified || r.address) && !tier && !band && !count && (
             <span className="block pt-1 text-[var(--color-faint)]">
               name resolves, but no provenance records published yet
             </span>

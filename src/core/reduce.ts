@@ -62,6 +62,7 @@ export function apply(s: Session, e: MassEvent): Session {
             tier: p.tier,
             present: true,
             ensName: p.ensName,
+            crewName: p.crewName,
             method: p.method,
           },
         },

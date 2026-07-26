@@ -21,7 +21,7 @@
  * before this session and can be checked outside it.
  */
 
-import { resolveName, type EnsEnv } from "./ens.js";
+import type { EnsEnv } from "./ens.js";
 
 /** How long a login challenge stays valid. Short: it is replayable until used. */
 const NONCE_TTL_MS = 5 * 60_000;
@@ -96,28 +96,35 @@ export async function verifyWalletLogin(
   }
 
   // Reverse-resolve so the seat is named by ENS rather than by a hex string.
-  // A wallet with no primary name still gets a seat; it just has no ENS
-  // identity to show, which the UI states plainly rather than printing hex.
+  //
+  // On MAINNET, not on the parent's chain. The name a person already owns is
+  // their identity, and those live on mainnet while our parent sits on the v2
+  // beta on Sepolia. Looking on the wrong chain finds nothing and we would mint
+  // them a name they did not need — see homeChainFor.
+  //
+  // A wallet with no name still gets a seat; it just has no identity of its own
+  // to show, which is exactly when a crew subname is worth issuing.
   let ensName: string | undefined;
   let ensVerified = false;
   try {
     const { createPublicClient, http } = await import("viem");
-    const { mainnet, sepolia } = await import("viem/chains");
-    if (env.ENS_L1_RPC) {
-      const chain = env.ENS_CHAIN === "sepolia" ? sepolia : mainnet;
-      const client = createPublicClient({ chain, transport: http(env.ENS_L1_RPC) });
-      const primary = await client.getEnsName({ address: address as `0x${string}` });
-      if (primary) {
-        // Trust the reverse record only when the forward record agrees.
-        const forward = await resolveName(env, primary);
-        if (forward.address?.toLowerCase() === address.toLowerCase()) {
-          ensName = primary;
-          ensVerified = forward.verified;
-        }
+    const { mainnet } = await import("viem/chains");
+    const client = createPublicClient({
+      chain: mainnet,
+      transport: http(env.ENS_MAINNET_RPC ?? "https://ethereum-rpc.publicnode.com"),
+    });
+    const primary = await client.getEnsName({ address: address as `0x${string}` });
+    if (primary) {
+      // Trust the reverse record only when the forward record agrees. A reverse
+      // record alone is unilateral: anyone can point their address at any name.
+      const forward = await client.getEnsAddress({ name: primary });
+      if (forward?.toLowerCase() === address.toLowerCase()) {
+        ensName = primary;
+        ensVerified = true;
       }
     }
   } catch {
-    // No ENS identity is not a login failure — it is a seat without a name.
+    // No identity is not a login failure — it is a seat without a name yet.
   }
 
   return { ok: true, address, ensName, ensVerified };

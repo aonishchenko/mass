@@ -33,6 +33,15 @@ export interface EnsEnv {
   ENS_L1_RPC?: string;
   /** Chain for resolution: "mainnet" | "sepolia". Default "mainnet". */
   ENS_CHAIN?: string;
+  /**
+   * Mainnet RPC, used for names the crew does NOT own.
+   *
+   * A seat's identity is whichever name that person already has, and those live
+   * on mainnet while our parent is on the v2 beta on Sepolia. Without this,
+   * someone arriving with a real name resolves to nothing and we would have to
+   * rename them — see resolveName.
+   */
+  ENS_MAINNET_RPC?: string;
   /** Durin L2 registry address (real subname issuance). */
   ENS_DURIN_REGISTRY?: string;
   /** ERC-8004 Identity Registry this agent is registered in (address). */
@@ -316,6 +325,8 @@ export interface ResolvedName {
   /** true if forward (name→addr) and reverse (addr→name) agree. */
   verified: boolean;
   records: Record<string, string>;
+  /** Which network answered — "parent" is ours, "mainnet" is the seat's own. */
+  chain?: "parent" | "mainnet";
   dev: boolean;
   /**
    * The resolver contract answering for this name, when it has one.
@@ -360,6 +371,13 @@ const TEXT_KEYS = [
   "com.mass.capTable.token",
   "com.mass.owners",
   // seat provenance
+  /**
+   * The name this seat is actually known by, when they brought their own.
+   * Written on OUR subname and pointing at THEIRS: our name is entitled to say
+   * "this crew member is niek.eth", and is not entitled to say anything else
+   * about who they are.
+   */
+  "com.mass.identity",
   "com.mass.tier",
   "com.mass.sybilBand",
   "com.mass.contribCount",
@@ -377,6 +395,21 @@ const TEXT_KEYS = [
  * enabled) against the configured L1 RPC. Falls back to deterministic dev names
  * when ENS isn't configured, so the demo never shows a hex address.
  */
+/**
+ * Which network answers for this name.
+ *
+ * Names under our parent live wherever the parent lives. Everything else is
+ * somebody's own name, and those are on mainnet. Deriving this from the name
+ * rather than from config is deliberate: one setting cannot be right for both,
+ * and a crew member who already owns a name must not have to give it up to
+ * appear here.
+ */
+export function homeChainFor(env: EnsEnv, name: string): "parent" | "mainnet" {
+  const parent = parentName(env);
+  if (parent && (name === parent || name.endsWith(`.${parent}`))) return "parent";
+  return "mainnet";
+}
+
 export async function resolveName(env: EnsEnv, name: string): Promise<ResolvedName> {
   if (!ensConfigured(env)) {
     if (env.ENS_DEV_FALLBACK === "1") return devResolve(name);
@@ -386,8 +419,16 @@ export async function resolveName(env: EnsEnv, name: string): Promise<ResolvedNa
   try {
     const { createPublicClient, http } = await import("viem");
     const { mainnet, sepolia } = await import("viem/chains");
-    const chain = env.ENS_CHAIN === "sepolia" ? sepolia : mainnet;
-    const client = createPublicClient({ chain, transport: http(env.ENS_L1_RPC) });
+    const home = homeChainFor(env, name);
+    const chain = home === "parent" && env.ENS_CHAIN === "sepolia" ? sepolia : mainnet;
+    const rpc =
+      home === "parent"
+        ? env.ENS_L1_RPC
+        : // A public endpoint is a reasonable default here: these are read-only
+          // lookups of names we do not own, and the alternative is refusing to
+          // resolve a crew member's real identity for want of a config value.
+          (env.ENS_MAINNET_RPC ?? "https://ethereum-rpc.publicnode.com");
+    const client = createPublicClient({ chain, transport: http(rpc) });
 
     const address = await client.getEnsAddress({ name });
     let verified = false;
@@ -415,7 +456,7 @@ export async function resolveName(env: EnsEnv, name: string): Promise<ResolvedNa
       }
     }
 
-    return { name, address: address ?? null, verified, records, resolver, dev: false };
+    return { name, address: address ?? null, verified, records, resolver, chain: home, dev: false };
   } catch (err) {
     return {
       name,

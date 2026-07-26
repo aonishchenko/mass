@@ -90,6 +90,8 @@ export interface SeatClaimedPayload {
   tier: Tier;
   /** ENS subname assigned to this seat (M5). Deterministic; unique per session. */
   ensName?: string;
+  /** The crew subname we issued — see Seat.crewName. */
+  crewName?: string;
   /**
    * How this seat proved identity. "wallet" proves key control only, so it is
    * shown differently and can never reach Signer — see src/ens/wallet.ts.
@@ -368,8 +370,20 @@ export interface Seat {
   tier: Tier;
   present: boolean;
   sybilScore?: number;
-  /** ENS subname (M5) — the seat's resolvable identity; zero-hex everywhere. */
+  /**
+   * The name this seat is known by — their own if they have one, ours if not.
+   * Zero-hex everywhere.
+   */
   ensName?: string;
+  /**
+   * The subname we issued under the crew's parent. Always ours, and equal to
+   * `ensName` only when the seat arrived without a name of its own.
+   *
+   * Kept separate because the two names assert different things: theirs says
+   * who they are, ours says they are in this crew at this tier. We cannot write
+   * crew claims onto a name we do not own, so we do not pretend to.
+   */
+  crewName?: string;
   /** How identity was proved. "wallet" = key control only, never a unique human. */
   method?: "world" | "wallet";
   /** World nullifier of the Selfie proof (audit; opaque, no PII). */

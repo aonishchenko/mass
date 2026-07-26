@@ -250,7 +250,26 @@ export class SessionRoom extends DurableObject<Env> {
     }
 
     if (url.pathname.endsWith("/ens/resolve")) {
-      return Response.json(await resolveName(this.env, url.searchParams.get("name") ?? ""));
+      const asked = url.searchParams.get("name") ?? "";
+      const resolved = await resolveName(this.env, asked);
+
+      /**
+       * If this name belongs to a seat, also resolve the crew subname we issued
+       * for them. A citation names the person; the provenance behind it — tier,
+       * uniqueness band, contribution count — lives on our name, because those
+       * are the only claims we are entitled to publish. The mapping between the
+       * two is here rather than guessed on the client, which cannot know it.
+       */
+      const seat = Object.values(this.session.seats).find(
+        (s) => s.ensName?.toLowerCase() === asked.toLowerCase()
+      );
+      const crewName = seat?.crewName;
+      const crew =
+        crewName && crewName.toLowerCase() !== asked.toLowerCase()
+          ? await resolveName(this.env, crewName)
+          : undefined;
+
+      return Response.json(crew ? { ...resolved, crew } : resolved);
     }
     if (url.pathname.endsWith("/ens/cv") || url.pathname.endsWith("/ens/agent")) {
       const profile = assembleAgentProfile(this.forRequest(url), this.env);
@@ -699,16 +718,21 @@ export class SessionRoom extends DurableObject<Env> {
     // Assign a unique ENS subname now (M5) so the seat has a resolvable identity
     // from the first event — zero hex anywhere in the UI.
     /**
-     * A wallet login arrives with a name that already exists on chain, so use
-     * it rather than minting another label. Ours are computed strings that
-     * nobody has registered; theirs resolves for a stranger, which is the whole
-     * point of accepting an ENS identity as login.
+     * Two names, two jobs.
+     *
+     * `crewName` is ours: it says this seat is in this crew, and it carries the
+     * tier and contribution count because those are claims we can back.
+     *
+     * `ensName` is what the seat is KNOWN by. If they arrived with a name of
+     * their own it is that one — it is older than this session, on mainnet, and
+     * checkable by a stranger, which is everything a citation wants. Renaming
+     * them to our testnet subname would swap stronger evidence for weaker.
      */
-    const ensName =
-      claims.ensName ?? joinName(uniqueSeatLabel(name, this.takenLabels()), this.env);
+    const crewName = joinName(uniqueSeatLabel(name, this.takenLabels()), this.env);
+    const ensName = claims.ensName ?? crewName;
     await this.emit(
       "seat.claimed",
-      { seat: seatId, name, tier: "T1", ensName, method: claims.method ?? "world" },
+      { seat: seatId, name, tier: "T1", ensName, crewName, method: claims.method ?? "world" },
       { system: true }
     );
 
