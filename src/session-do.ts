@@ -1220,7 +1220,10 @@ export class SessionRoom extends DurableObject<Env> {
       const chunks = this.session.brainChunks;
       const prevRoot = this.session.brainRoot;
       try {
-        const rootHash = await writeBrain(this.env, chunks, prevRoot);
+        const rootHash = await this.withRetries(
+          () => writeBrain(this.env, chunks, prevRoot),
+          "brain write"
+        );
         // Only on a real root hash. Never fabricate one (§8.2).
         await this.emit(
           "brain.updated",
@@ -1237,10 +1240,46 @@ export class SessionRoom extends DurableObject<Env> {
           { system: true }
         );
       } catch (err) {
-        // Chunks stay in memory, no event emitted, pending chip stays (§10).
-        console.error("brain write failed, will retry on next acceptance", err);
+        // Chunks stay in memory and no event is emitted, so the UI keeps saying
+        // "saving" — see Rail, which starts telling the truth about a write
+        // that is taking too long rather than spinning silently (§10).
+        console.error("brain write failed after retries", err);
       }
     });
+
+    /**
+     * Keep the object alive until the write lands.
+     *
+     * This is fire-and-forget from a socket message, and a Durable Object may
+     * be evicted as soon as its handler returns. The 0G upload takes about ten
+     * seconds, so the object was routinely going away mid-write: no
+     * brain.updated, no error either — just a "saving the brain…" chip that
+     * never cleared, because nothing was left running to clear it.
+     */
+    this.ctx.waitUntil(this.brainQueue);
+  }
+
+  /**
+   * Retry a storage write a few times before giving up.
+   *
+   * 0G testnet nodes stall and recover on their own, and the previous policy —
+   * one attempt, then wait for the next accepted contribution — meant a single
+   * blip left the brain unsaved until somebody happened to teach something
+   * else. Backoff is fixed and short: this runs inside waitUntil, which is not
+   * an unlimited budget.
+   */
+  private async withRetries<T>(fn: () => Promise<T>, label: string): Promise<T> {
+    let lastErr: unknown;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        return await fn();
+      } catch (err) {
+        lastErr = err;
+        console.error(`${label} attempt ${attempt} failed`, err);
+        if (attempt < 3) await new Promise((r) => setTimeout(r, attempt * 2_000));
+      }
+    }
+    throw lastErr;
   }
 
   // -------------------------------------------------------------------------

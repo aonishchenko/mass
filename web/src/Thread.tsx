@@ -12,6 +12,7 @@ import {
 } from "@assistant-ui/react";
 import { ResolvedName } from "./ResolvedName";
 import { ZgMark } from "./Brand";
+import { BrainSaving } from "./Rail";
 import { ArrowUpIcon, ShieldCheckIcon, SproutIcon, XIcon, ZapIcon } from "lucide-react";
 import type { FC, ReactNode } from "react";
 import Markdown from "react-markdown";
@@ -227,7 +228,9 @@ const AssistantMessage: FC<{
       </div>
       {uncited && <TeachItNow onFocusTeach={onFocusTeach} />}
       {!view.brainRoot && view.brainPending && (
-        <p className="pt-2 text-xs text-[var(--color-faint)]">saving the brain…</p>
+        <div className="pt-2">
+          <BrainSaving />
+        </div>
       )}
     </MessagePrimitive.Root>
   );

@@ -4,7 +4,7 @@
  * (which renders only from MassEvents — MASS-specs M1).
  */
 
-import { useState, type FC } from "react";
+import { useEffect, useState, type FC } from "react";
 import {
   CheckIcon,
   DatabaseIcon,
@@ -167,6 +167,36 @@ import { HederaPanel } from "./Hedera";
 import { hasWallet, loginWithWallet, walletName } from "./wallet";
 import { crewParent, hashscanTx, usePending, useVisible } from "./ui";
 import { EnsLink, EnsMark, HederaMark, WorldMark, ZgMark } from "./Brand";
+
+/**
+ * The brain-saving chip, which admits when it is stuck.
+ *
+ * A 0G upload takes about ten seconds, so a brief "saving" is normal. What is
+ * not normal is a chip that spins forever, which is what a failed write used to
+ * look like: identical to a slow one, with nothing to click and nothing to
+ * read. After a while this says so, and says what still holds — the
+ * contribution and its ownership are already recorded; it is only the copy on
+ * 0G that has not landed.
+ */
+export const BrainSaving: FC = () => {
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setSlow(true), 25_000);
+    return () => clearTimeout(t);
+  }, []);
+
+  return slow ? (
+    <p
+      className="text-[11px] leading-snug text-amber-700"
+      title="The contribution and the cap table are already in the event log. Only the copy on 0G is outstanding, and it retries on its own."
+    >
+      still saving to 0G — retrying. The contribution and who owns it are already
+      recorded.
+    </p>
+  ) : (
+    <p className="text-[11px] text-amber-700">saving the brain…</p>
+  );
+};
 
 const Section: FC<{ icon: React.ReactNode; title: string; children: React.ReactNode }> = ({
   icon,
@@ -740,7 +770,7 @@ export const Rail: FC<{
             </ul>
           </>
         )}
-        {view.brainPending && <p className="text-[11px] text-amber-700">saving the brain…</p>}
+        {view.brainPending && <BrainSaving />}
         {view.brainRoot && (
           <p className="text-[11px] text-[var(--color-muted)]">
             <span
