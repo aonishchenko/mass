@@ -3,8 +3,11 @@ name: CI
 # Typecheck, tests, build and the zero-hex check on every push and PR.
 #
 # main is a shared, fast-moving branch: without this, a type error or a failing
-# test can land and only be discovered by the next person to pull. This job does
-# NOT deploy anything — the sidecar image pipeline stays in its own workflow.
+# test can land and only be discovered by the next person to pull.
+#
+# Every commit on main is then deployed to Cloudflare by the `deploy` job below.
+# The Railway sidecar has its own workflow and deploys in parallel, so a push to
+# main updates both halves of the system.
 
 on:
   push:
@@ -14,6 +17,8 @@ on:
 
 concurrency:
   group: ci-${{ github.ref }}
+  # On main this group also covers the deploy, so cancelling an in-flight run is
+  # the right thing: the newer commit is what should end up live.
   cancel-in-progress: true
 
 jobs:
@@ -49,3 +54,50 @@ jobs:
       # than at deploy time.
       - name: Build web
         run: npm run web:build
+
+  # Ships main to Cloudflare. Gated on `verify` on purpose: "immediately" should
+  # not mean "before we know it compiles" — the whole point of the checks above
+  # is that they run before anyone sees the result. It costs ~40s.
+  deploy:
+    needs: verify
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://mass.aonishchenko33.workers.dev
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install (worker)
+        run: npm ci --legacy-peer-deps || npm install --legacy-peer-deps
+
+      - name: Install (web)
+        run: npm --prefix web ci || npm --prefix web install
+
+      # `npm run deploy` runs the web build first via predeploy, so the assets
+      # uploaded are always built from this commit.
+      - name: Deploy to Cloudflare
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: npm run deploy
+
+      # A deploy that returns 500 is not a deploy. Fail loudly rather than leave
+      # a green tick over a broken site.
+      - name: Verify it answers
+        run: |
+          set -euo pipefail
+          for _ in $(seq 1 12); do
+            CODE=$(curl -sS -o /dev/null -w '%{http_code}' https://mass.aonishchenko33.workers.dev/ || true)
+            if [ "$CODE" = "200" ]; then
+              curl -sS --fail https://mass.aonishchenko33.workers.dev/api/stats > /dev/null
+              echo "worker is live"; exit 0
+            fi
+            echo "got $CODE, retrying"; sleep 5
+          done
+          echo "::error::worker did not answer after deploy"
+          exit 1
