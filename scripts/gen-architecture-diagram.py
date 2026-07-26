@@ -16,8 +16,8 @@ chosen so those real dependencies are short lines rather than a hairball:
   harness  -> 0G Router           direct HTTPS from the Worker, no sidecar
   captable -> payout              src/hedera/split.ts  (the 30% ownership leg)
   attrib   -> payout              src/hedera/split.ts  (the 70% use leg)
-  ledger   -> sidecar -> Hedera   services/zg-storage/hedera.mjs (SDK needs gRPC)
-  attrib   -> sidecar -> 0G       services/zg-storage/index.mjs  (Storage SDK)
+  ledger   -> Hedera              services/zg-storage/hedera.mjs (via the sidecar)
+  attrib   -> 0G Storage          services/zg-storage/index.mjs  (via the sidecar)
 
 Regenerate:  python3 scripts/gen-architecture-diagram.py
 """
@@ -35,7 +35,7 @@ OUT = os.path.join(
 
 c = Canvas(
     1840,
-    1150,
+    900,
     "MASS system architecture",
     "How MASS runs: a browser client, an AI Sessions Engine built on Cloudflare "
     "Workers and Durable Objects, and four onchain layers — World for "
@@ -49,7 +49,7 @@ c.header(
 )
 
 # --------------------------------------------------------- Browser client
-c.group(50, 150, 380, 620, "BROWSER CLIENT", "React", "groupClient")
+c.group(50, 150, 380, 640, "BROWSER CLIENT", "React", "groupClient")
 c.box(78, 230, 324, 116, "Session thread", "Everyone talks to the same\nagent, in one conversation.", "blueBox")
 c.box(78, 364, 324, 116, "Crew rail", "Who is here, what tier they\nhold, what just happened.", "blueBox")
 c.box(78, 498, 324, 116, "Review sheet", "Where a contribution is\nproposed and co-signed.", "blueBox")
@@ -57,7 +57,7 @@ c.box(78, 632, 324, 116, "Live evidence",
       "Ledger ticker, agent CV, cap\ntable — refreshing on their own.", "blueBox")
 
 # ------------------------------------------------------ AI Sessions Engine
-c.group(470, 150, 860, 730, "AI SESSIONS ENGINE", "Cloudflare Workers + Durable Objects", "groupCore")
+c.group(470, 150, 860, 640, "AI SESSIONS ENGINE", "Cloudflare Workers + Durable Objects", "groupCore")
 
 L, R, BW, BH = 496, 910, 390, 118
 r1, r2, r3, r4 = 230, 364, 498, 632
@@ -82,20 +82,17 @@ c.logoBox(L, r4, BW, BH, ["hedera"], "Ledger",
 c.logoBox(R, r4, BW, BH, ["hedera"], "Payout engine",
           "Splits a job 70% by what it used, 30% by who\nowns it, in whole units that reconcile exactly.")
 
-c.logoBox(496, 766, 804, 92, [], "Node sidecar",
-          "The two SDKs that cannot run on the edge: Hedera needs gRPC, 0G Storage needs Node internals.")
-
 # -------------------------------------------------------------- Onchain
-c.group(1370, 150, 420, 930, "ONCHAIN", "what the app cannot vouch for alone", "groupChain")
+c.group(1370, 150, 420, 640, "ONCHAIN", "what the app cannot vouch for alone", "groupChain")
 
-c.chainCard(1396, 226, 368, 190, "world", "World", "Proof of personhood",
-            "Verifies that a seat is a real,\nunique person — the thing a\nwallet signature can never show.")
-c.chainCard(1396, 434, 368, 190, "ens", "ENS", "Identity and provenance",
-            "Names every seat and the agent.\nCitations resolve live, so a claim\ncan be checked outside MASS.")
-c.chainCard(1396, 642, 368, 190, "zg", "0G", "Inference and archive",
-            "Runs the model in a trusted\nenclave and keeps the full\nsession archive.")
-c.chainCard(1396, 850, 368, 208, "hedera", "Hedera", "Provenance and payouts",
-            "Timestamps the log so the order\nof contributions is not ours to\nedit, and settles the money that\nfollows it.")
+c.chainCard(1396, r1, 368, 118, "world", "World", "Proof of personhood",
+            "Proves a seat is a real, unique\nperson.", small=True)
+c.chainCard(1396, r2, 368, 118, "ens", "ENS", "Identity and provenance",
+            "Names every seat and the agent;\ncitations resolve live.", small=True)
+c.chainCard(1396, r3, 368, 118, "zg", "0G", "Inference and archive",
+            "Runs the model in an enclave and\nkeeps the session archive.", small=True)
+c.chainCard(1396, r4, 368, 118, "hedera", "Hedera", "Provenance and payouts",
+            "Timestamps the log, and settles\nthe money that follows it.", small=True)
 
 # ---------------------------------------------------------------- Flows
 LC, RC = L + BW / 2, R + BW / 2  # column centres
@@ -124,18 +121,21 @@ c.arrow([(RC, r3 + BH + 2), (RC, r4 - 4)])
 # not cut through the two boxes that sit between them.
 c.arrow([(L - 4, r2 + BH / 2), (482, r2 + BH / 2), (482, r4 + BH / 2), (L - 6, r4 + BH / 2)])
 
-# Everything that writes to a chain from a real SDK goes out through the sidecar.
-c.arrow([(LC, r4 + BH + 2), (LC, 762)], "flowAmber", "arrowAmber")
-c.arrow([(RC, r4 + BH + 2), (RC, 762)], "flowAmber", "arrowAmber")
-
 # Engine -> chains.
-c.arrow([(R + BW + 2, r1 + 42), (1394, 300)], "flowGreen", "arrowGreen")   # Auth -> World
-c.arrow([(R + BW + 2, r1 + 92), (1394, 492)], "flowGreen", "arrowGreen")   # Auth -> ENS
-c.arrow([(R + BW + 2, r2 + 74), (1394, 700)], "flowGreen", "arrowGreen")   # harness -> 0G Router
-c.arrow([(1302, 796), (1394, 776)], "flowGreen", "arrowGreen")             # sidecar -> 0G Storage
-c.arrow([(1302, 830), (1394, 912)], "flowGreen", "arrowGreen")             # sidecar -> Hedera
+c.arrow([(R + BW + 2, r1 + 40), (1394, r1 + 44)], "flowGreen", "arrowGreen")   # Auth -> World
+c.arrow([(R + BW + 2, r1 + 88), (1394, r2 + 44)], "flowGreen", "arrowGreen")   # Auth -> ENS
+c.arrow([(R + BW + 2, r2 + 74), (1394, r3 + 40)], "flowGreen", "arrowGreen")   # harness -> 0G Router
+c.arrow([(R + BW + 2, r3 + 80), (1394, r3 + 76)], "flowGreen", "arrowGreen")   # archive -> 0G Storage
+c.arrow([(R + BW + 2, r4 + 74), (1394, r4 + 52)], "flowGreen", "arrowGreen")   # payouts -> Hedera
+# Ledger -> Hedera. Taken under the row and up the gutter between the two
+# groups: straight across, it ran through the payout engine's own text.
+c.arrow(
+    [(LC, r4 + BH + 2), (LC, r4 + BH + 22), (1350, r4 + BH + 22), (1350, r4 + 68), (1392, r4 + 68)],
+    "flowGreen",
+    "arrowGreen",
+)
 
-c.text(50, 1128,
+c.text(50, 862,
        "The archive keeps everything. The brain keeps only what the crew accepted — that gap is the product, not a limitation.",
        "body")
 

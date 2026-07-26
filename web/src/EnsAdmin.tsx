@@ -23,6 +23,7 @@ import {
   custom,
   http,
   encodeFunctionData,
+  numberToHex,
   decodeEventLog,
   zeroAddress,
   type Address,
@@ -58,17 +59,18 @@ interface SeatPlan {
 }
 
 /**
- * The seats to issue. `oleksiy` is the only one with a confirmed address; the
- * rest are left blank on purpose rather than pointed at a placeholder, because
- * a subname resolving to the wrong wallet is worse than one that does not exist
- * — the whole point of the citation check is that resolution means something.
+ * The seats to issue. Every owner starts blank on purpose rather than pointed
+ * at a placeholder: a subname resolving to the wrong wallet is worse than one
+ * that does not exist, since the whole point of the citation check is that
+ * resolution means something.
+ *
+ * `oleksiy` fills itself in from the connected wallet — see `connect` — which
+ * is both what it meant and one fewer hex address living in UI source.
  */
+const SELF = "oleksiy";
+
 const SEATS: SeatPlan[] = [
-  {
-    label: "oleksiy",
-    owner: "0x7B397A473162f6D23c03E436c500C3C050911236",
-    records: { "com.mass.tier": "T2", "com.mass.sybilBand": "high" },
-  },
+  { label: SELF, owner: "", records: { "com.mass.tier": "T2", "com.mass.sybilBand": "high" } },
   { label: "doc", owner: "", records: { "com.mass.tier": "T2" } },
   { label: "niek", owner: "", records: { "com.mass.tier": "T2" } },
 ];
@@ -189,13 +191,20 @@ const App: React.FC = () => {
     if (!eth) return say("No wallet found.");
     const accs = (await eth.request({ method: "eth_requestAccounts" })) as Address[];
     setAccount(accs[0]);
+    // The console is opened by the parent's owner, so their own seat is the one
+    // they are here to mint; anything already typed wins.
+    if (accs[0]) {
+      setSeats((prev) =>
+        prev.map((p) => (p.label === SELF && !p.owner ? { ...p, owner: accs[0] } : p))
+      );
+    }
     const cid = (await eth.request({ method: "eth_chainId" })) as string;
     if (parseInt(cid, 16) !== sepolia.id) {
       setChainOk(false);
       try {
         await eth.request({
           method: "wallet_switchEthereumChain",
-          params: [{ chainId: "0xaa36a7" }],
+          params: [{ chainId: numberToHex(sepolia.id) }],
         });
         setChainOk(true);
       } catch {

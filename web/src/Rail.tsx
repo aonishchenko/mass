@@ -164,7 +164,7 @@ const ANCHORED = new Set([
   "payout",
 ]);
 import { HederaPanel } from "./Hedera";
-import { hasWallet, loginWithWallet } from "./wallet";
+import { hasWallet, loginWithWallet, walletName } from "./wallet";
 import { hashscanTx, usePending, useVisible } from "./ui";
 
 const Section: FC<{ icon: React.ReactNode; title: string; children: React.ReactNode }> = ({
@@ -509,7 +509,7 @@ export const Rail: FC<{
               title="Proves you control this wallet — not that you are a unique human"
               className="mt-1.5 w-full rounded-md border border-[#1a1a18]/25 py-1.5 text-[12px] hover:bg-white/60 disabled:opacity-40"
             >
-              Sign in with your ENS name (wallet)
+              Sign in with your ENS name ({walletName() ?? "wallet"})
             </button>
           )}
 

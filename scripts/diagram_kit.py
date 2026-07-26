@@ -157,12 +157,15 @@ class Canvas:
                 f'class="logoText" style="font-size:{size*0.46:.1f}px">0G</text>'
             )
 
-    def chainCard(self, x, y, w, h, kind, name, sub, body):
+    def chainCard(self, x, y, w, h, kind, name, sub, body, small=False):
+        """`small` matches a chain card to the density of a component box, so
+        the three columns of the diagram can share one height."""
         self.out.append(f'<rect class="chainBox" x="{x}" y="{y}" width="{w}" height="{h}"/>')
-        self.logo(kind, x + 20, y + 18, 44)
-        self.text(x + 78, y + 38, name, "smallLabel")
-        self.text(x + 78, y + 58, sub, "tiny")
-        self.text(x + 20, y + 92, body, "body", dy=20)
+        size = 26 if small else 44
+        self.logo(kind, x + 18, y + 16, size)
+        self.text(x + 18 + size + 10, y + 30 if small else y + 38, name, "smallLabel")
+        self.text(x + 18 + size + 10, y + 48 if small else y + 58, sub, "tiny")
+        self.text(x + 18, y + 72 if small else y + 92, body, "tiny" if small else "body", dy=18 if small else 20)
 
     def logoBox(self, x, y, w, h, kinds, title, body, cls="plain"):
         """A component box that carries the marks of the chains it depends on."""

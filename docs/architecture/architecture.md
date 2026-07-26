@@ -5,7 +5,11 @@
 </p>
 
 Generated, not drawn — every arrow corresponds to a call that exists in the
-code, and the generator lists which one. Regenerate after changing the system:
+code, and the generator lists which one. The Node sidecar is deliberately not
+a box: it is where two SDKs happen to run, not a thing the reader has to hold,
+so the Hedera and 0G Storage writes are drawn to their chains and the hop is
+described under *Where each chain actually sits*. Regenerate after changing the
+system:
 
 ```bash
 python3 scripts/gen-architecture-diagram.py

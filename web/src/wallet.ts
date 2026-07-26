@@ -16,26 +16,63 @@ export interface WalletLogin {
 interface Eip1193 {
   request(args: { method: string; params?: unknown[] }): Promise<unknown>;
   isMetaMask?: boolean;
-  providers?: Eip1193[];
+}
+
+interface Eip6963Detail {
+  info: { uuid: string; name: string; icon: string; rdns: string };
+  provider: Eip1193;
 }
 
 /**
- * Pick a provider.
+ * Find the wallet, the way the standard says to.
  *
- * When several wallet extensions are installed they fight over
- * `window.ethereum`: the last one to load wins, and the one the user is
- * actually looking at may not be the one we end up talking to. EIP-5749 leaves
- * the others in `providers[]`, so prefer MetaMask when it is there rather than
- * signing into whichever extension happened to load last.
+ * `window.ethereum` is a single slot that every installed extension writes to,
+ * and the last one to load wins — so on a machine with more than one wallet we
+ * were asking whichever extension happened to boot last, and getting its
+ * "No active wallet found" back while MetaMask sat there unlocked and ignored.
+ * `providers[]` was the old workaround and modern MetaMask no longer sets it.
+ *
+ * EIP-6963 replaced both: wallets announce themselves in response to an event,
+ * so every installed one is discoverable by name instead of by luck.
  */
-function provider(): Eip1193 | undefined {
-  const root = (globalThis as { ethereum?: Eip1193 }).ethereum;
-  if (!root) return undefined;
-  if (Array.isArray(root.providers) && root.providers.length > 0) {
-    return root.providers.find((p) => p.isMetaMask) ?? root.providers[0];
-  }
-  return root;
+const announced = new Map<string, Eip6963Detail>();
+
+if (typeof window !== "undefined") {
+  window.addEventListener("eip6963:announceProvider", (event: Event) => {
+    const d = (event as CustomEvent<Eip6963Detail>).detail;
+    if (d?.info?.rdns) announced.set(d.info.rdns, d);
+  });
+  // Wallets that loaded before this listener re-announce when asked.
+  window.dispatchEvent(new Event("eip6963:requestProvider"));
 }
+
+function discovered(): Eip6963Detail | undefined {
+  // Extensions can inject after this module loads, so ask again while the map
+  // is empty. Wallets answer synchronously, which is why a re-ask is enough and
+  // no waiting is needed.
+  if (announced.size === 0 && typeof window !== "undefined") {
+    window.dispatchEvent(new Event("eip6963:requestProvider"));
+  }
+  if (announced.size === 0) return undefined;
+  const byRdns = announced.get("io.metamask");
+  if (byRdns) return byRdns;
+  for (const d of announced.values()) {
+    if (d.provider?.isMetaMask) return d;
+  }
+  return announced.values().next().value;
+}
+
+function provider(): Eip1193 | undefined {
+  return (
+    discovered()?.provider ??
+    // Last resort: a wallet too old to announce itself. Whatever is in the slot
+    // is better than refusing to try.
+    (globalThis as { ethereum?: Eip1193 }).ethereum
+  );
+}
+
+/** Which wallet we will actually talk to — shown on the button so it is not a surprise. */
+export const walletName = (): string | undefined => discovered()?.info.name;
 
 export const hasWallet = () => Boolean(provider());
 
@@ -54,6 +91,9 @@ function describe(err: unknown): string {
   if (code === 4900 || code === 4901) return "Your wallet is locked or disconnected. Unlock it and try again.";
 
   const msg = e?.data?.message ?? e?.message ?? (typeof err === "string" ? err : "");
+  if (/no active wallet|no accounts|not set up/i.test(msg)) {
+    return `${walletName() ?? "That wallet"} has no account set up. Unlock it, or install MetaMask.`;
+  }
   return msg ? `Wallet sign-in failed: ${msg}` : "Wallet sign-in failed (no reason given by the wallet).";
 }
 
