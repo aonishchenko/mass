@@ -90,6 +90,11 @@ export interface SeatClaimedPayload {
   tier: Tier;
   /** ENS subname assigned to this seat (M5). Deterministic; unique per session. */
   ensName?: string;
+  /**
+   * How this seat proved identity. "wallet" proves key control only, so it is
+   * shown differently and can never reach Signer — see src/ens/wallet.ts.
+   */
+  method?: "world" | "wallet";
 }
 
 /** A4: what this crew is building, so a visitor is not met with a room code. */
@@ -359,6 +364,8 @@ export interface Seat {
   sybilScore?: number;
   /** ENS subname (M5) — the seat's resolvable identity; zero-hex everywhere. */
   ensName?: string;
+  /** How identity was proved. "wallet" = key control only, never a unique human. */
+  method?: "world" | "wallet";
   /** World nullifier of the Selfie proof (audit; opaque, no PII). */
   nullifierHash?: string;
   /** AgentKit / Orb delegation reference, set when the seat becomes a Signer. */

@@ -78,6 +78,7 @@ export interface SessionView {
       ensName?: string;
       /** This seat's proof came from the DEV bypass — never checked by World. */
       dev?: boolean;
+      method?: "world" | "wallet";
     }
   >;
   /** True once any verification was issued by the DEV fallback (honesty banner). */

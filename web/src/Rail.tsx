@@ -93,7 +93,21 @@ const labelFor = (type: string) => EVENT_LABEL[type] ?? type;
  *
  * So each case says its own true thing, and none of them says a number.
  */
-const VerificationBadge: FC<{ seat: { tier: Tier; dev?: boolean } }> = ({ seat }) => {
+const VerificationBadge: FC<{
+  seat: { tier: Tier; dev?: boolean; method?: "world" | "wallet"; ensName?: string };
+}> = ({ seat }) => {
+  // Checked before tier, because a wallet seat sits at T2 and would otherwise
+  // fall through to "Verified human" — the one thing a signature cannot prove.
+  if (seat.method === "wallet") {
+    return (
+      <span
+        title="Signed in with a wallet. Proves key control, not that this is a unique human — Builder at most."
+        className="rounded-full bg-sky-600/12 px-1.5 py-0.5 text-[10px] text-sky-900"
+      >
+        wallet · not sybil-checked
+      </span>
+    );
+  }
   if (seat.dev) {
     return (
       <span
@@ -148,6 +162,7 @@ const ANCHORED = new Set([
   "payout",
 ]);
 import { HederaPanel } from "./Hedera";
+import { hasWallet, loginWithWallet } from "./wallet";
 import { hashscanTx, usePending, useVisible } from "./ui";
 
 const Section: FC<{ icon: React.ReactNode; title: string; children: React.ReactNode }> = ({
@@ -471,6 +486,27 @@ export const Rail: FC<{
           >
             {verifying ? "Waiting for World…" : act.isPending("claim") ? "Joining…" : "Verify with World"}
           </button>
+
+          {hasWallet() && (
+            <button
+              onClick={async () => {
+                if (!name.trim() || act.pending) return;
+                setAuthError(null);
+                act.start("claim");
+                try {
+                  const r = await loginWithWallet(sessionId);
+                  send({ kind: "claimSeat", name: name.trim(), selfieToken: r.token });
+                } catch (e) {
+                  setAuthError(e instanceof Error ? e.message : "Wallet sign-in failed");
+                }
+              }}
+              disabled={!name.trim() || verifying || !!act.pending}
+              title="Proves you control this wallet — not that you are a unique human"
+              className="mt-1.5 w-full rounded-md border border-[#1a1a18]/25 py-1.5 text-[12px] hover:bg-white/60 disabled:opacity-40"
+            >
+              Sign in with your ENS name (wallet)
+            </button>
+          )}
 
           {/* Kept deliberately last and visually separate: it verifies NOTHING
               and exists so a broken World path can never block a rehearsal. */}

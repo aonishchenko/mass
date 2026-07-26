@@ -56,7 +56,14 @@ export function apply(s: Session, e: MassEvent): Session {
         ...s,
         seats: {
           ...s.seats,
-          [p.seat]: { seat: p.seat, name: p.name, tier: p.tier, present: true, ensName: p.ensName },
+          [p.seat]: {
+            seat: p.seat,
+            name: p.name,
+            tier: p.tier,
+            present: true,
+            ensName: p.ensName,
+            method: p.method,
+          },
         },
       };
     }

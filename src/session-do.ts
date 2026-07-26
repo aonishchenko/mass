@@ -38,6 +38,7 @@ import {
   verifyWorldProof,
   type VerifyKind,
 } from "./world/verify.js";
+import { newChallenge, verifyWalletLogin } from "./ens/wallet.js";
 import {
   agentCard,
   agentTextRecords,
@@ -207,6 +208,16 @@ export class SessionRoom extends DurableObject<Env> {
       return this.handleVerify(request, "agentkit", verifySession);
     }
     if (url.pathname.endsWith("/verify/log")) return this.handleVerifyLog();
+
+    // Wallet login (ENS identity). A weaker proof than World by design — see
+    // src/ens/wallet.ts — offered so a crew member with a name but no World
+    // credential can still take part.
+    if (url.pathname.endsWith("/verify/wallet/challenge")) {
+      return Response.json(newChallenge(verifySession));
+    }
+    if (url.pathname.endsWith("/verify/wallet")) {
+      return this.handleWalletLogin(request, verifySession);
+    }
 
     // ENS (M5) — resolve any name, or the agent's live employment record (CV).
     /**
@@ -687,14 +698,29 @@ export class SessionRoom extends DurableObject<Env> {
     const seatId = newId("s");
     // Assign a unique ENS subname now (M5) so the seat has a resolvable identity
     // from the first event — zero hex anywhere in the UI.
-    const ensName = joinName(uniqueSeatLabel(name, this.takenLabels()), this.env);
-    await this.emit("seat.claimed", { seat: seatId, name, tier: "T1", ensName }, { system: true });
+    /**
+     * A wallet login arrives with a name that already exists on chain, so use
+     * it rather than minting another label. Ours are computed strings that
+     * nobody has registered; theirs resolves for a stranger, which is the whole
+     * point of accepting an ENS identity as login.
+     */
+    const ensName =
+      claims.ensName ?? joinName(uniqueSeatLabel(name, this.takenLabels()), this.env);
+    await this.emit(
+      "seat.claimed",
+      { seat: seatId, name, tier: "T1", ensName, method: claims.method ?? "world" },
+      { system: true }
+    );
 
     // Sybil score gates capability (HARD REQUIREMENT 2): below threshold the seat
     // is an Observer — a verified human, but not trusted to propose, co-sign, or
     // earn equity. The reason is derivable in the UI from tier + score.
     const threshold = sybilThreshold(this.env);
-    const grantedTier: "T1" | "T2" = claims.sybilScore >= threshold ? "T2" : "T1";
+    // A wallet signature carries no sybil score, so the threshold test would
+    // silently demote it to Observer. It is a Builder: weaker than a verified
+    // human, stronger than an anonymous visitor.
+    const grantedTier: "T1" | "T2" =
+      claims.method === "wallet" ? "T2" : claims.sybilScore >= threshold ? "T2" : "T1";
     await this.emit(
       "verify.selfie.ok",
       {
@@ -831,6 +857,71 @@ export class SessionRoom extends DurableObject<Env> {
   }
 
   /** The booth-showable verification log (newest first, sanitized). */
+  /**
+   * Issues a seat token from a wallet signature.
+   *
+   * The nullifier is the ADDRESS, so the existing one-human-one-seat check
+   * applies unchanged: the same wallet cannot take two seats in a room. It does
+   * not stop one person using two wallets, which is exactly why this path caps
+   * at Builder and is labelled wallet-verified wherever it appears.
+   */
+  private async handleWalletLogin(request: Request, session: string): Promise<Response> {
+    let body: { nonce?: string; issuedAt?: number; signature?: string };
+    try {
+      body = (await request.json()) as typeof body;
+    } catch {
+      return Response.json({ ok: false, error: "malformed request" }, { status: 400 });
+    }
+
+    const r = await verifyWalletLogin(this.env, {
+      session,
+      nonce: String(body.nonce ?? ""),
+      issuedAt: Number(body.issuedAt),
+      signature: String(body.signature ?? ""),
+    });
+
+    const verifiedAt = Date.now();
+    this.ctx.storage.sql.exec(
+      "INSERT INTO verify_log (ts, kind, ok, dev, detail) VALUES (?, ?, ?, ?, ?)",
+      verifiedAt,
+      "wallet",
+      r.ok ? 1 : 0,
+      0,
+      JSON.stringify({ address: r.address, ensName: r.ensName, error: r.error })
+    );
+
+    if (!r.ok || !r.address) {
+      return Response.json({ ok: false, error: r.error ?? "verification failed" }, { status: 401 });
+    }
+
+    const token = await issueToken(
+      this.env,
+      "selfie",
+      {
+        ok: true,
+        nullifierHash: r.address.toLowerCase(),
+        credential: "wallet",
+        // Not a sybil score. A wallet says nothing about uniqueness, and
+        // inventing a number here would launder that into the cap table.
+        sybilScore: 0,
+        verifiedAt,
+        dev: false,
+        raw: null,
+      },
+      session,
+      { method: "wallet", ensName: r.ensName }
+    );
+
+    return Response.json({
+      ok: true,
+      token,
+      address: r.address,
+      ensName: r.ensName,
+      ensVerified: r.ensVerified,
+      method: "wallet",
+    });
+  }
+
   private handleVerifyLog(): Response {
     const rows = this.ctx.storage.sql
       .exec<{ ts: number; kind: string; ok: number; dev: number; detail: string }>(

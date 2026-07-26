@@ -276,6 +276,14 @@ const TOKEN_TTL_MS = 10 * 60 * 1000;
 
 export interface TokenClaims {
   kind: VerifyKind;
+  /**
+   * How identity was established. "world" proves a unique human; "wallet"
+   * proves only key control, so it must never be treated as sybil-resistant.
+   * Absent on older tokens, which were all World.
+   */
+  method?: "world" | "wallet";
+  /** Wallet logins arrive already carrying a resolvable name. */
+  ensName?: string;
   /** Tier this proof grants: Selfie → T2 (Builder), Orb/AgentKit → T3 (Signer). */
   tier: "T2" | "T3";
   nullifierHash: string;
@@ -322,12 +330,17 @@ export async function issueToken(
   env: WorldEnv,
   kind: VerifyKind,
   outcome: VerifyOutcome,
-  session: string
+  session: string,
+  extra: { method?: "world" | "wallet"; ensName?: string } = {}
 ): Promise<string> {
   if (!outcome.ok || !outcome.nullifierHash) throw new Error("cannot issue token for a failed verification");
   const claims: TokenClaims = {
     kind,
-    tier: kind === "agentkit" ? "T3" : "T2",
+    method: extra.method ?? "world",
+    ensName: extra.ensName,
+    // A wallet proves key control, not a unique human, so it stops at Builder
+    // no matter which endpoint issued it.
+    tier: extra.method === "wallet" ? "T2" : kind === "agentkit" ? "T3" : "T2",
     nullifierHash: outcome.nullifierHash,
     sybilScore: outcome.sybilScore,
     verifiedAt: outcome.verifiedAt,
