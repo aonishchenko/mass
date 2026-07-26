@@ -115,8 +115,8 @@ MASS makes.
 | | |
 |---|---|
 | **Built** | Server-side verification, sybil-gated tiers, live quorum authority, continuity records, one-human-one-seat, session-bound proofs |
-| **Feedback** | 13 dated developer entries + the full preferred-feedback headings in [`world-testing.md`](../world-testing.md) — including our blunt asks (expose a numeric sybil score; publish one complete Selfie Check example) |
+| **Feedback** | 13 dated developer entries + the full preferred-feedback headings in [`world-testing.md`](../guides/world-testing.md) — including our blunt asks (expose a numeric sybil score; publish one complete Selfie Check example) |
 | **Live** | https://mass.aonishchenko33.workers.dev |
 | **Verify it yourself** | Open `src/world/verify.ts`, or `GET /api/verify/log` on the deployed URL |
 
-*Technical brief: [`WORLD-TASK.md`](../WORLD-TASK.md) · Setup: [`WORLD-SETUP.md`](../WORLD-SETUP.md)*
+*Technical brief: [`WORLD-TASK.md`](../tasks/WORLD-TASK.md) · Setup: [`WORLD-SETUP.md`](../guides/WORLD-SETUP.md)*

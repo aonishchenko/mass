@@ -37,7 +37,7 @@ the last job and why. Every number is real; the payment is explicitly absent.
 **Ownership** is the cap-table fold: your accepted contributions over all
 accepted contributions.
 
-**Use** is measured, not asserted. See [`src/core/attribution.ts`](../src/core/attribution.ts):
+**Use** is measured, not asserted. See [`src/core/attribution.ts`](../../src/core/attribution.ts):
 
 - every knowledge chunk enters the prompt tagged with an opaque marker;
 - the model repeats the markers of anything it uses;

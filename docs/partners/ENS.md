@@ -118,4 +118,4 @@ ENS is the difference between a provable system and a *legible* one.
 | **Live** | https://mass.aonishchenko33.workers.dev · CV page at `/cv/<name>` |
 | **Verify it yourself** | `node scripts/grep-hex.mjs` (zero-hex), `GET /api/ens/cv` (the live record) |
 
-*Technical brief: [`ENS-TASK.md`](../ENS-TASK.md)*
+*Technical brief: [`ENS-TASK.md`](../tasks/ENS-TASK.md)*

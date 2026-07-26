@@ -72,6 +72,14 @@ Everything else (delegation, mandates, audit trails, iNFT minting) is
 
 ## How it works
 
+<p align="center">
+  <img src="docs/architecture/assets/architecture-system.svg" alt="MASS system architecture: crew, browser, Cloudflare Worker and Durable Object, and the four Web3 layers — World, ENS, 0G and Hedera" width="100%">
+</p>
+
+A session is one Durable Object — a single writer, so the order of events is a
+fact rather than an agreement. Full walkthrough:
+[`docs/architecture/architecture.md`](./docs/architecture/architecture.md).
+
 ### The agent is a repository (git-native)
 
 An agent is physically a folder of text — values, knowledge, skills, mandates.
@@ -87,7 +95,7 @@ MASS adds the four things git lacks:
 One motion: chat → *"Propose to brain"* → the agent drafts a concrete
 before/after → two verified signatures → merge → hash anchored, snapshot sealed,
 brain reindexed → the agent cites the lines it uses → payment follows those
-lines. See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for how a contribution is
+lines. See [`CONTRIBUTING.md`](./docs/agent/CONTRIBUTING.md) for how a contribution is
 proposed, signed, and merged.
 
 ### Authority model
@@ -144,7 +152,7 @@ what each human would receive for the last job and why, and the UI labels it as
 calculated. No transfer is made: the agent is not live on a marketplace and
 nobody has linked a payout account yet. The design for the real thing —
 self-custody, accrue-then-claim — is in
-[`docs/PAYOUT-DESIGN.md`](./docs/PAYOUT-DESIGN.md).
+[`docs/PAYOUT-DESIGN.md`](./docs/tasks/PAYOUT-DESIGN.md).
 
 ### Payment flow (Hedera)
 
@@ -172,7 +180,7 @@ skills, examples, mandates, harness, tests, rate card, ownership. Readiness
 clicking an empty slot drops a facilitation prompt into the composer that
 interviews the crew about that part of itself. The prompts ask for tacit
 knowledge — war stories, red lines, the embarrassing example — not definitions.
-See [`BUILD-PATH.md`](./BUILD-PATH.md) and the slot data in
+See [`BUILD-PATH.md`](./docs/guides/BUILD-PATH.md) and the slot data in
 [`BUILD-PATH.json`](./BUILD-PATH.json).
 
 ---
@@ -188,14 +196,14 @@ Once built, the agent is a hireable, earning asset — and MASS runs its payroll
 - **Listing** — a MASS agent is an HTTP endpoint that takes a brief and returns
   a deliverable, citations, and a TEE attestation, so it lists on marketplaces
   via the API-only seller path. See
-  [`LISTING-ON-VIRTUALS-ACP.md`](./LISTING-ON-VIRTUALS-ACP.md).
+  [`LISTING-ON-VIRTUALS-ACP.md`](./docs/guides/LISTING-ON-VIRTUALS-ACP.md).
 - **Earnings → payroll** — when a job settles, earnings sweep into the ENS-named
   Hedera treasury and the split runs: **70% to the authors of the lines cited in
   that job, 30% pro-rata to all equity holders** (minimum transfer 0.1 HBAR),
   logged to HCS against the job and its citations. Neither the marketplace nor
   the settlement layer splits a seller's earnings among the humans who built it —
   that is MASS's layer. See
-  [`MARKETPLACE-EARNINGS.md`](./MARKETPLACE-EARNINGS.md).
+  [`MARKETPLACE-EARNINGS.md`](./docs/guides/MARKETPLACE-EARNINGS.md).
 
 ---
 
@@ -236,7 +244,7 @@ Once built, the agent is a hireable, earning asset — and MASS runs its payroll
 
 > *"Built together. Owned together. Earning together. On the record."*
 
-Full demo script, booth pitches, and video plan: [`SUBMISSION-PACK.md`](./SUBMISSION-PACK.md).
+Full demo script, booth pitches, and video plan: [`SUBMISSION-PACK.md`](./docs/hackathon/SUBMISSION-PACK.md).
 
 ---
 
@@ -341,22 +349,27 @@ Worth stating plainly rather than leaving to be discovered:
 
 ## Documentation
 
+Everything lives in [`docs/`](./docs/README.md) — that index is the map. The
+table below is the short version.
+
 | File | Purpose |
 |------|---------|
-| [MASS-specs.md](./MASS-specs.md) | v0.7 git-native single source of truth — positioning, authority model, interface contracts, module cards, feature register, merge points, timeline |
-| [shared-session-spec.md](./shared-session-spec.md) | Session core module — WS protocol, event sourcing & replay, draft/canonical lanes, contribution lifecycle, 0G brain + archive |
-| [hedera-spec.md](./hedera-spec.md) | Hedera module — HCS provenance ledger, pay-per-inference, the payroll split, HTS cap table |
-| [AGENT.md](./AGENT.md) | The weekend's agent — the Technical Documentation Writer: what it is, entry point, what earns ownership |
-| [BUILD-PATH.md](./BUILD-PATH.md) | The guided flow that turns a session into a complete agent (the twelve slots) |
+| [docs/README.md](./docs/README.md) | Index of every document, by folder |
+| [docs/architecture/architecture.md](./docs/architecture/architecture.md) | The system in one page: components, request path, where each chain sits |
+| [MASS-specs.md](./docs/spec/MASS-specs.md) | v0.7 git-native single source of truth — positioning, authority model, interface contracts, module cards, feature register, merge points, timeline |
+| [shared-session-spec.md](./docs/spec/shared-session-spec.md) | Session core module — WS protocol, event sourcing & replay, draft/canonical lanes, contribution lifecycle, 0G brain + archive |
+| [hedera-spec.md](./docs/spec/hedera-spec.md) | Hedera module — HCS provenance ledger, pay-per-inference, the payroll split, HTS cap table |
+| [AGENT.md](./docs/agent/AGENT.md) | The weekend's agent — the Technical Documentation Writer: what it is, entry point, what earns ownership |
+| [BUILD-PATH.md](./docs/guides/BUILD-PATH.md) | The guided flow that turns a session into a complete agent (the twelve slots) |
 | [BUILD-PATH.json](./BUILD-PATH.json) | Slot data + facilitation prompts driving the Build Path (readiness is derived, not stored) |
-| [CONTRIBUTING.md](./CONTRIBUTING.md) | How a contribution is proposed, signed, merged, and what earns ownership |
-| [LISTING-ON-VIRTUALS-ACP.md](./LISTING-ON-VIRTUALS-ACP.md) | Putting a co-built agent to work on the Virtuals ACP marketplace |
-| [MARKETPLACE-EARNINGS.md](./MARKETPLACE-EARNINGS.md) | Reading the agent's earnings and how marketplace revenue becomes contributor payouts |
-| [TASKBOARD.md](./TASKBOARD.md) | Checkbox-level execution plan per lane, with merge-point gates |
-| [SUBMISSION-PACK.md](./SUBMISSION-PACK.md) | README skeleton, demo script, booth pitches, video plan, per-track checklists |
-| [PITCH.md](./PITCH.md) | 4-minute pitch script, slide sequence, and an exhaustive Q&A playbook |
-| [world-testing-template.md](./world-testing-template.md) | World beta testing documentation (a required prize deliverable) |
-| [PROVENANCE.md](./PROVENANCE.md) | How these planning documents were developed |
+| [CONTRIBUTING.md](./docs/agent/CONTRIBUTING.md) | How a contribution is proposed, signed, merged, and what earns ownership |
+| [LISTING-ON-VIRTUALS-ACP.md](./docs/guides/LISTING-ON-VIRTUALS-ACP.md) | Putting a co-built agent to work on the Virtuals ACP marketplace |
+| [MARKETPLACE-EARNINGS.md](./docs/guides/MARKETPLACE-EARNINGS.md) | Reading the agent's earnings and how marketplace revenue becomes contributor payouts |
+| [TASKBOARD.md](./docs/tasks/TASKBOARD.md) | Checkbox-level execution plan per lane, with merge-point gates |
+| [SUBMISSION-PACK.md](./docs/hackathon/SUBMISSION-PACK.md) | README skeleton, demo script, booth pitches, video plan, per-track checklists |
+| [PITCH.md](./docs/hackathon/PITCH.md) | 4-minute pitch script, slide sequence, and an exhaustive Q&A playbook |
+| [world-testing-template.md](./docs/guides/world-testing-template.md) | World beta testing documentation (a required prize deliverable) |
+| [PROVENANCE.md](./docs/hackathon/PROVENANCE.md) | How these planning documents were developed |
 
 ---
 
@@ -364,6 +377,6 @@ Worth stating plainly rather than leaving to be discovered:
 
 **Building — spec v0.7 (git-native edition).** Demo Sunday 09:00 WEST, with ENS
 and Hedera booth pitches Sunday AM. Weekend scope is one agent end to end — the
-Technical Documentation Writer. See [`TASKBOARD.md`](./TASKBOARD.md) for the
-hour-by-hour run plan and [`MASS-specs.md`](./MASS-specs.md) for the frozen
+Technical Documentation Writer. See [`TASKBOARD.md`](./docs/tasks/TASKBOARD.md) for the
+hour-by-hour run plan and [`MASS-specs.md`](./docs/spec/MASS-specs.md) for the frozen
 interface contracts the build follows.

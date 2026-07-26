@@ -278,7 +278,7 @@ mintCapTable(allocations):
 ```
 
 Allocations come from `capTable(session)` in
-[src/core/reduce.ts](./src/core/reduce.ts) — a fold over `contrib.accepted`.
+[src/core/reduce.ts](../../src/core/reduce.ts) — a fold over `contrib.accepted`.
 **Never hand-edit.** The whole claim is that the numbers are derived from
 evidence; a manual override makes the token a claim rather than a proof.
 

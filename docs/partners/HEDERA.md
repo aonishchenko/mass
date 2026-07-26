@@ -122,4 +122,4 @@ anyone. The neutrality is the product.
 | **Live** | https://mass.aonishchenko33.workers.dev |
 | **Verify it yourself** | `GET /api/hcs` and `GET /api/stats`, then the same topic on HashScan |
 
-*Technical brief: [`HEDERA-TASK.md`](../HEDERA-TASK.md) · Earnings model: [`MARKETPLACE-EARNINGS.md`](../../MARKETPLACE-EARNINGS.md)*
+*Technical brief: [`HEDERA-TASK.md`](../tasks/HEDERA-TASK.md) · Earnings model: [`MARKETPLACE-EARNINGS.md`](../guides/MARKETPLACE-EARNINGS.md)*
