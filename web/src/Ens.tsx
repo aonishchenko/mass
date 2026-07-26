@@ -57,14 +57,23 @@ export const EnsPanel: FC<{ sessionId: string; closed: boolean }> = ({ sessionId
           className="truncate font-mono text-[13px] text-[var(--color-ink)]"
           mark={false}
         />
-        <span
-          title={resolved.verified ? "Forward and reverse resolution agree" : "Not yet verified"}
-          className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
-            resolved.verified ? "bg-emerald-600/15 text-emerald-800" : "bg-amber-500/15 text-amber-800"
-          }`}
-        >
-          {resolved.verified ? "✓ verified" : "⚠ pending"}
-        </span>
+        {/*
+          Only the positive case gets a badge.
+
+          "pending" was shown whenever forward and reverse resolution disagreed,
+          which is the normal state for a crew subname: an address has one
+          primary name, so every seat but one reads unverified forever. A
+          permanent warning that nobody can clear is noise, and it made a name
+          that resolves correctly look broken.
+        */}
+        {resolved.verified && (
+          <span
+            title="Forward and reverse resolution agree"
+            className="shrink-0 rounded-full bg-emerald-600/15 px-1.5 py-0.5 text-[10px] font-medium text-emerald-800"
+          >
+            ✓ verified
+          </span>
+        )}
       </div>
       <p className="pt-1 text-[11px] text-[var(--color-muted)]">
         Resolves to a full employment record — skills, teachers, owners, brain hash.

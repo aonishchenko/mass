@@ -915,11 +915,8 @@ export const Rail: FC<{
             onClick={() => setLogOpen((o) => !o)}
             className="mb-1.5 w-full rounded-md border border-[#1a1a18]/15 py-1 font-sans text-[11px] text-[var(--color-muted)] hover:bg-white/60"
           >
-            {/* Two marks because the rows carry two claims: the event log is
-                archived to 0G, and the anchored rows link to Hedera. */}
             <span className="inline-flex items-center gap-1.5">
               <ZgMark size={11} />
-              <HederaMark size={11} />
               {logOpen ? "Hide activity" : `Show all activity (${view.events.length})`}
             </span>
           </button>
