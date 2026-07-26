@@ -61,6 +61,21 @@ export function usePending(view: SessionView) {
   return { pending, start, cancel, guard, isPending: (key: string) => pending === key };
 }
 
+/**
+ * The crew's parent name, read off any subname the session already shows.
+ *
+ * Derived rather than configured on the client: the server owns the parent, and
+ * a second copy in the bundle is a second thing to get out of step. It decides
+ * only which ENS app a name links to, so an absent value degrades to the
+ * mainnet app rather than breaking anything.
+ */
+export const crewParent = (view: { agentEnsName?: string }): string | undefined => {
+  const n = view.agentEnsName;
+  if (!n) return undefined;
+  const dot = n.indexOf(".");
+  return dot > 0 ? n.slice(dot + 1) : undefined;
+};
+
 /** Progressive disclosure: long lists start at 10 and grow on demand. */
 export function useVisible(step = 10) {
   const [count, setCount] = useState(step);

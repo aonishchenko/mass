@@ -11,6 +11,7 @@ import {
   useMessage,
 } from "@assistant-ui/react";
 import { ResolvedName } from "./ResolvedName";
+import { ZgMark } from "./Brand";
 import { ArrowUpIcon, ShieldCheckIcon, SproutIcon, XIcon, ZapIcon } from "lucide-react";
 import type { FC, ReactNode } from "react";
 import Markdown from "react-markdown";
@@ -310,7 +311,13 @@ export const Thread: FC<{
   };
 
   return (
-  <ThreadPrimitive.Root className="flex h-full flex-col bg-[var(--color-cream)] font-serif text-[var(--color-ink)]">
+  <ThreadPrimitive.Root className="relative flex h-full flex-col bg-[var(--color-cream)] font-serif text-[var(--color-ink)]">
+    {/* Every answer in this column is produced on 0G, so the column says so —
+        top-left, out of the way, and only claiming the thing it can back. */}
+    <div className="pointer-events-none absolute top-3 left-4 z-10 flex items-center gap-1.5 rounded-full bg-[var(--color-ink)]/[0.045] px-2 py-1 font-sans text-[10px] tracking-wide text-[var(--color-muted)] uppercase">
+      <ZgMark size={12} />
+      inference on 0G
+    </div>
     <ThreadPrimitive.Viewport className="flex grow flex-col overflow-y-auto pt-6 sm:pt-10">
       <ThreadPrimitive.Empty>
         <div className="mx-auto max-w-3xl px-4 pt-12 text-center sm:pt-16">

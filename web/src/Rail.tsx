@@ -165,7 +165,8 @@ const ANCHORED = new Set([
 ]);
 import { HederaPanel } from "./Hedera";
 import { hasWallet, loginWithWallet, walletName } from "./wallet";
-import { hashscanTx, usePending, useVisible } from "./ui";
+import { crewParent, hashscanTx, usePending, useVisible } from "./ui";
+import { EnsLink, EnsMark, HederaMark, WorldMark, ZgMark } from "./Brand";
 
 const Section: FC<{ icon: React.ReactNode; title: string; children: React.ReactNode }> = ({
   icon,
@@ -486,7 +487,10 @@ export const Rail: FC<{
             disabled={!name.trim() || verifying || !!act.pending}
             className="mt-2 w-full rounded-md bg-[var(--color-ink)] py-2 text-[var(--color-cream)] hover:opacity-85 disabled:opacity-40"
           >
-            {verifying ? "Waiting for World…" : act.isPending("claim") ? "Joining…" : "Verify with World"}
+            <span className="inline-flex items-center gap-1.5">
+              <WorldMark size={14} />
+              {verifying ? "Waiting for World…" : act.isPending("claim") ? "Joining…" : "Verify with World"}
+            </span>
           </button>
 
           {hasWallet() && (
@@ -509,7 +513,10 @@ export const Rail: FC<{
               title="Proves you control this wallet — not that you are a unique human"
               className="mt-1.5 w-full rounded-md border border-[#1a1a18]/25 py-1.5 text-[12px] hover:bg-white/60 disabled:opacity-40"
             >
-              Sign in with your ENS name ({walletName() ?? "wallet"})
+              <span className="inline-flex items-center gap-1.5">
+                <EnsMark size={14} />
+                Sign in with your ENS name ({walletName() ?? "wallet"})
+              </span>
             </button>
           )}
 
@@ -548,9 +555,11 @@ export const Rail: FC<{
                     {!s.present && <span className="text-[10px] text-[var(--color-faint)]"> · away</span>}
                   </span>
                   {s.ensName && (
-                    <span className="block truncate font-mono text-[10px] text-[var(--color-muted)]">
-                      {s.ensName}
-                    </span>
+                    <EnsLink
+                      name={s.ensName}
+                      parent={crewParent(view)}
+                      className="block truncate font-mono text-[10px] text-[var(--color-muted)]"
+                    />
                   )}
                 </span>
                 <span className="flex shrink-0 items-center gap-1.5">
@@ -709,9 +718,11 @@ export const Rail: FC<{
                         same display name, and this is the one number that must
                         never be ambiguous. */}
                     {o.ensName && (
-                      <span className="block truncate font-mono text-[10px] text-[var(--color-faint)]">
-                        {o.ensName}
-                      </span>
+                      <EnsLink
+                        name={o.ensName}
+                        parent={crewParent(view)}
+                        className="block truncate font-mono text-[10px] text-[var(--color-faint)]"
+                      />
                     )}
                   </span>
                   <span
@@ -736,7 +747,7 @@ export const Rail: FC<{
               className="rounded-full bg-emerald-600/15 px-1.5 py-0.5 text-[10px] font-medium text-emerald-800"
               title={`The agent's brain is stored on 0G and fingerprinted, so any change is detectable.\nContent hash: ${view.brainRoot}`}
             >
-              ✓ brain verified
+              <ZgMark size={11} /> brain verified
             </span>
           </p>
         )}
@@ -846,7 +857,7 @@ export const Rail: FC<{
         )}
       </Section>
 
-      <Section icon={<BriefcaseIcon size={12} />} title="Run a job">
+      <Section icon={<HederaMark size={12} />} title="Run a job">
         <p className="pb-2 text-[11.5px] leading-snug text-[var(--color-muted)]">
           A paid job runs sealed in a TEE, answers only from the brain, cites the
           people who taught it, and pays the compute provider on Hedera. This is
@@ -887,7 +898,7 @@ export const Rail: FC<{
         )}
       />
 
-      <Section icon={<ScrollTextIcon size={12} />} title="Ledger">
+      <Section icon={<HederaMark size={12} />} title="Ledger">
         {/*
           47 rows of "draft.completed" is precise for an engineer and noise for
           everyone else. The meaning goes on top; the raw feed stays underneath

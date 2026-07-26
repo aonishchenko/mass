@@ -6,8 +6,9 @@
  * rows. If the network has not returned a message yet, it is not shown.
  */
 
+import { HederaMark, ZgMark } from "./Brand";
 import { useEffect, useState, type FC } from "react";
-import { ExternalLinkIcon, ShieldIcon } from "lucide-react";
+import { ExternalLinkIcon } from "lucide-react";
 import { hashscanMessage, useVisible } from "./ui";
 
 interface AnchoredMessage {
@@ -129,12 +130,17 @@ export const HederaPanel: FC<{
   return (
     <section className="border-b border-[#1a1a18]/8 px-4 py-3">
       <h2 className="flex items-center gap-1.5 pb-2 text-[11px] tracking-wide text-[var(--color-faint)] uppercase">
-        <ShieldIcon size={12} /> Anchored on Hedera
+        <HederaMark size={12} /> Anchored on Hedera
       </h2>
 
       <p className="pb-2 text-[11.5px] leading-snug text-[var(--color-muted)]">
         Read live from Hedera's Mirror Node — not from this browser. Only hashes
-        are published; the conversation itself never leaves 0G.
+        are published; the conversation itself never leaves{" "}
+        <span className="inline-flex items-center gap-1">
+          <ZgMark size={11} />
+          0G
+        </span>
+        .
       </p>
 
       {/* Plain-language strip. Every number here is counted — from the network

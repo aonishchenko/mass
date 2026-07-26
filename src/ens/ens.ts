@@ -27,7 +27,7 @@ import type { Session } from "../core/types.js";
 export interface EnsEnv {
   /** Crew/session parent name, e.g. "mass.eth". */
   ENS_PARENT_NAME?: string;
-  /** Agent label under the parent (the weekend agent). Default "docs". */
+  /** Agent label under the parent (the weekend agent). Default "docswriter". */
   ENS_AGENT_LABEL?: string;
   /** L1 RPC used for CCIP-Read resolution (mainnet/sepolia). */
   ENS_L1_RPC?: string;
@@ -127,7 +127,7 @@ export function agentName(
 ): string | undefined {
   if (session?.agentEnsName) return session.agentEnsName;
   const parent = parentName(env);
-  return parent ? `${env.ENS_AGENT_LABEL || "docs"}.${parent}` : undefined;
+  return parent ? `${env.ENS_AGENT_LABEL || "docswriter"}.${parent}` : undefined;
 }
 
 /**

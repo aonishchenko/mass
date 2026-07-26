@@ -53,7 +53,7 @@
     // We run on SEPOLIA (L1 name) with subnames issued on BASE SEPOLIA (L2),
     // so the whole flow is testnet and free. See ENS-BASE-SEPOLIA-GUIDE.md.
     "ENS_PARENT_NAME": "mass-lisbon.eth",
-    "ENS_AGENT_LABEL": "doc",
+    "ENS_AGENT_LABEL": "docswriter",
     "ENS_CHAIN": "sepolia",
 
     // ERC-8004 identity registry the agent is registered in, and its id there.

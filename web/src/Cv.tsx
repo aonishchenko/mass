@@ -6,6 +6,7 @@
  * Reachable at /cv/<name>; the agent's ENS `url` record points here.
  */
 
+import { EnsLink } from "./Brand";
 import { useEffect, useState } from "react";
 
 interface Owner {
@@ -94,7 +95,9 @@ export function Cv({ name }: { name: string }) {
     <Shell>
       <header className="border-b border-[#1a1a18]/10 pb-5">
         <div className="flex items-center gap-2">
-          <h1 className="font-mono text-[22px] font-semibold text-[var(--color-ink)]">{p.name}</h1>
+          <h1 className="font-mono text-[22px] font-semibold text-[var(--color-ink)]">
+            <EnsLink name={p.name} parent={p.name.split(".").slice(1).join(".")} />
+          </h1>
           <span
             title={resolved.verified ? "Forward and reverse resolution agree" : "Name not verified"}
             className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
@@ -176,7 +179,12 @@ export function Cv({ name }: { name: string }) {
           <ul className="space-y-1">
             {p.owners.map((o) => (
               <li key={o.name} className="flex items-center justify-between text-[13px]">
-                <span className="font-mono">{o.name}</span>
+                <EnsLink
+                  name={o.name}
+                  parent={p.name.split(".").slice(1).join(".")}
+                  className="font-mono"
+                  mark={false}
+                />
                 <span className="tabular-nums text-[var(--color-muted)]">
                   {o.contributions} taught · {pct(o.shareBps)}
                 </span>

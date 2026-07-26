@@ -13,6 +13,7 @@
  */
 
 import { useEffect, useState, type FC } from "react";
+import { EnsLink } from "./Brand";
 
 interface Resolved {
   name: string;
@@ -106,7 +107,12 @@ export const ResolvedName: FC<{ name: string; children: React.ReactNode }> = ({
 
       {open && r && (
         <span className="absolute bottom-full left-0 z-20 mb-1 block w-64 rounded-lg border border-[#1a1a18]/15 bg-white p-2.5 font-sans text-[11.5px] leading-snug shadow-lg">
-          <span className="block font-mono text-[11px] break-all">{r.name}</span>
+          <EnsLink
+            name={r.name}
+            parent={r.crew ? undefined : r.name.split(".").slice(1).join(".")}
+            className="block font-mono text-[11px] break-all"
+            mark={false}
+          />
 
           {r.verified ? (
             <span className="block pt-1 text-emerald-800">
@@ -130,7 +136,12 @@ export const ResolvedName: FC<{ name: string; children: React.ReactNode }> = ({
               {count && <span className="block">contributions · {count}</span>}
               {r.crew && (
                 <span className="block pt-1 font-mono text-[10.5px] break-all">
-                  via {r.crew.name}
+                  via{" "}
+                  <EnsLink
+                    name={r.crew.name}
+                    parent={r.crew.name.split(".").slice(1).join(".")}
+                    mark={false}
+                  />
                 </span>
               )}
             </span>
