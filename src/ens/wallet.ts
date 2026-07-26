@@ -5,11 +5,16 @@
  *
  * A signature proves control of a key. It does NOT prove a unique human — one
  * person can hold a thousand wallets in a minute, and that is precisely the
- * attack the cap table has to resist. So a wallet seat is deliberately weaker
- * than a World seat, and is labelled as such everywhere it appears:
+ * attack the cap table has to resist.
  *
- *   World  → verified unique human   → may reach Signer, co-sign, earn equity
- *   Wallet → verified key holder     → Builder at most, marked wallet-verified
+ *   World  → verified unique human   → Signer, sybil-checked
+ *   Wallet → verified key holder     → Signer, NOT sybil-checked
+ *
+ * Both may co-sign: a crew signing in with wallets still has to be able to
+ * merge a contribution, and a Builder cannot. What differs is the strength of
+ * the claim, so the grant carries `method: "wallet"` and the seat carries
+ * `signerVia` — the log lets an auditor separate the two, which a badge alone
+ * could not do after the fact.
  *
  * The value it adds is identity, not uniqueness: the seat arrives already
  * carrying a resolvable ENS name, so citations point at a name that existed

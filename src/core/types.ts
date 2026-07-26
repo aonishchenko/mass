@@ -130,6 +130,12 @@ export interface AgentKitOkPayload {
   /** Anonymous human principal backing the delegation to the session agent. */
   principal: string;
   dev?: boolean;
+  /**
+   * What backed this signing authority. "wallet" means a key signature rather
+   * than an Orb proof — the same Signer powers, a weaker claim behind them, and
+   * the log says which so nobody has to infer it later.
+   */
+  method?: "world" | "wallet";
 }
 
 export interface ContinuityOkPayload {
@@ -370,6 +376,8 @@ export interface Seat {
   nullifierHash?: string;
   /** AgentKit / Orb delegation reference, set when the seat becomes a Signer. */
   proofRef?: string;
+  /** How this seat earned Signer — see AgentKitOkPayload.method. */
+  signerVia?: "world" | "wallet";
   /** When this seat's identity was last verified (ms). */
   verifiedAt?: number;
   /** Continuity re-verification timestamp (§B2.5). */

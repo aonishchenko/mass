@@ -96,15 +96,17 @@ const labelFor = (type: string) => EVENT_LABEL[type] ?? type;
 const VerificationBadge: FC<{
   seat: { tier: Tier; dev?: boolean; method?: "world" | "wallet"; ensName?: string };
 }> = ({ seat }) => {
-  // Checked before tier, because a wallet seat sits at T2 and would otherwise
+  // Checked before tier, because a wallet seat is a Signer and would otherwise
   // fall through to "Verified human" — the one thing a signature cannot prove.
+  // It may co-sign; it is still not evidence of a unique person, and the badge
+  // says so rather than letting the tier imply otherwise.
   if (seat.method === "wallet") {
     return (
       <span
-        title="Signed in with a wallet. Proves key control, not that this is a unique human — Builder at most."
+        title="Signed in with a wallet. May co-sign, but proves key control only — not that this is a unique human."
         className="rounded-full bg-sky-600/12 px-1.5 py-0.5 text-[10px] text-sky-900"
       >
-        wallet · not sybil-checked
+        wallet signer · not sybil-checked
       </span>
     );
   }

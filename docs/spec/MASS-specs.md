@@ -44,7 +44,15 @@ Foundry, commodity audit infra own that ground; see SUBMISSION-PACK prior-art).
 |---|---|---|
 | T1 Observer | invite link | watch + read log |
 | T2 Builder | World Selfie Check (+ sybil score recorded) | instruct agent (DRAFT lane) |
-| T3 Signer | Orb-verified via AgentKit | accept contributions, COMMIT actions |
+| T3 Signer | Orb-verified via AgentKit, **or** a wallet signature (see below) | accept contributions, COMMIT actions |
+
+**Two doors to Signer.** The Orb path is sybil-resistant; the wallet path proves
+key control only. Both may co-sign, because a crew that signed in with wallets
+still has to be able to merge a contribution and a Builder cannot. They are not
+conflated: the `verify.agentkit.ok` grant carries `method: "world" | "wallet"`,
+`Seat.signerVia` survives replay, and the crew list badges a wallet seat *wallet
+signer · not sybil-checked*. The property kept is auditability of which
+signatures were sybil-checked — not prevention.
 - DRAFT: >=1 T2 present. COMMIT / MERGE: **2 distinct verified signatures, the author may be one of them** (so at least one other human signs). Crew change → recompute perms.
 - Selfie continuity: re-verify on each accepted contribution.
 - HARD RULE: every World proof is VERIFIED SERVER-SIDE (on-chain or cloud API).

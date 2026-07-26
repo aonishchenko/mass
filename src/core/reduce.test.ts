@@ -212,3 +212,25 @@ describe("the build-path step travels with the work", () => {
     expect(s.contributions["c2"].slot).toBe("voice");
   });
 });
+
+describe("wallet-backed Signer", () => {
+  it("records how the seat earned Signer, and keeps the two apart", () => {
+    seq = 0;
+    const events: MassEvent[] = [
+      ev("session.created", {}),
+      ev("seat.claimed", { seat: "s_w", name: "oleksiy", tier: "T1", method: "wallet" }),
+      ev("verify.selfie.ok", { seat: "s_w", sybilScore: 0, attestationHash: "-" }),
+      ev("verify.agentkit.ok", { seat: "s_w", proofRef: "0x7B39", method: "wallet" }),
+      ev("seat.claimed", { seat: "s_o", name: "niek", tier: "T1" }),
+      ev("verify.selfie.ok", { seat: "s_o", sybilScore: 0.9, attestationHash: "x" }),
+      ev("verify.agentkit.ok", { seat: "s_o", proofRef: "orb" }),
+    ];
+    const s = replay(EMPTY_SESSION("s1"), events);
+
+    // A wallet seat may co-sign — that is what the crew asked for.
+    expect(s.seats["s_w"].tier).toBe("T3");
+    // But the log must never let it pass for an Orb-verified human.
+    expect(s.seats["s_w"].signerVia).toBe("wallet");
+    expect(s.seats["s_o"].signerVia).toBe("world");
+  });
+});

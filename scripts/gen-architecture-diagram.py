@@ -161,6 +161,7 @@ out.append(
   .amberBox { fill: #fef3c7; stroke: #f59e0b; stroke-width: 1.4; rx: 12; }
   .chainBox { fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.2; rx: 14; filter: url(#softShadow); }
   .tagBox { fill: #ffffff; stroke: #94a3b8; stroke-width: 1.2; }
+  .dashed { fill: #ffffff; fill-opacity: .55; stroke: #cbd5e1; stroke-width: 1.2; stroke-dasharray: 6 5; rx: 14; }
   .flow { fill: none; stroke: #475569; stroke-width: 2.2; }
   .flowAmber { fill: none; stroke: #b45309; stroke-width: 2.2; }
   .flowGreen { fill: none; stroke: #15803d; stroke-width: 2.2; }
@@ -174,16 +175,20 @@ text(58, 104, "Verified humans build one agent together. Every contribution is s
 # ---------------------------------------------------------------- 1. Crew
 group(50, 150, 300, 400, "CREW")
 box(80, 196, 240, 106, "Verified human", "One seat per person.\nSigner · Builder · Observer", "amberBox")
-box(80, 322, 240, 92, "Wallet holder", "ENS name as login.\nBuilder at most.", "plain")
+box(80, 322, 240, 92, "Wallet holder", "ENS name as login.\nMay co-sign; not\nsybil-checked.", "plain", dy=18)
 box(80, 434, 240, 92, "Client / employer", "Hires the agent,\npays per job.", "plain")
 
 # ------------------------------------------------------------- 2. Browser
-group(400, 150, 400, 620, "BROWSER  ·  React + assistant-ui", "groupClient")
-box(430, 196, 340, 116, "Session thread", "Streaming chat. Token deltas\nnever touch the event log.", "blueBox")
-box(430, 330, 340, 116, "Crew rail", "Live seats, tiers, event feed,\nHCS ticker with HashScan links.", "blueBox")
-box(430, 464, 340, 110, "Review sheet", "Mid- and end-session harvest.\nTwo signers merge a contribution.", "blueBox")
-box(430, 592, 340, 68, "Agent CV  /cv/<name>", "", "plain")
-box(430, 676, 340, 68, "Subname console  /ens-admin", "", "plain")
+group(400, 150, 400, 626, "BROWSER  ·  React + assistant-ui", "groupClient")
+box(430, 190, 340, 116, "Session thread", "Streaming chat. Token deltas\nnever touch the event log.", "blueBox")
+box(430, 322, 340, 116, "Crew rail", "Live seats, tiers, event feed,\nHCS ticker with HashScan links.", "blueBox")
+box(430, 454, 340, 116, "Review sheet", "Mid- and end-session harvest.\nTwo signers merge a contribution.", "blueBox")
+# Standalone pages — same browser, different job. They exist outside a
+# session, so they get their own frame rather than sitting in the session UI.
+out.append('<rect class="dashed" x="424" y="588" width="352" height="164"/>')
+text(440, 612, "STANDALONE PAGES  ·  no session, no seat", "tiny")
+box(438, 624, 324, 56, "Agent CV  /cv/<name>", "", "plain")
+box(438, 690, 324, 56, "Subname console  /ens-admin", "", "plain")
 
 # ---------------------------------------------------------------- 3. Core
 group(850, 150, 470, 620, "CLOUDFLARE  ·  edge", "groupCore")
@@ -233,15 +238,15 @@ text(86, 1034, "The archive keeps everything. The brain keeps only what was acce
 
 # ----------------------------------------------------------- 6. Flows
 # Crew -> browser
-arrow([(320, 249), (428, 249)])
+arrow([(320, 243), (428, 243)])
 # Browser -> worker (WS)
-arrow([(772, 254), (878, 239)])
-tag(786, 200, "1 · WebSocket intents")
+arrow([(772, 248), (878, 239)])
+tag(786, 196, "1 · WebSocket intents")
 # Worker -> DO
 arrow([(1085, 284), (1085, 304)], "flow")
 # DO -> browser (deltas)
-arrow([(878, 420), (774, 388)], "flow")
-tag(786, 336, "2 · token deltas")
+arrow([(878, 420), (774, 382)], "flow")
+tag(786, 330, "2 · token deltas")
 
 # World -> worker
 arrow([(1394, 262), (1292, 240)], "flowGreen", "arrowGreen")

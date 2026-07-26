@@ -114,7 +114,13 @@ export function apply(s: Session, e: MassEvent): Session {
         ...s,
         seats: {
           ...s.seats,
-          [p.seat]: { ...seat, tier: "T3", proofRef: p.proofRef, verifiedAt: e.ts },
+          [p.seat]: {
+            ...seat,
+            tier: "T3",
+            proofRef: p.proofRef,
+            signerVia: p.method ?? "world",
+            verifiedAt: e.ts,
+          },
         },
       };
     }

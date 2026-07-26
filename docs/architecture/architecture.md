@@ -28,7 +28,7 @@ Everything else is arranged around that.
 
 | Layer | What runs there | Why there |
 |---|---|---|
-| Browser | React + assistant-ui: the thread, the crew rail, the review sheet, the agent CV, the subname console | Streaming chat needs to feel local; the wallet lives here and cannot move |
+| Browser | React + assistant-ui: the session UI (thread, crew rail, review sheet), plus two standalone pages — the agent CV and the subname console | Streaming chat needs to feel local; the wallet lives here and cannot move |
 | Cloudflare Worker | routes `/api` and `/ws`, serves the SPA | Edge-cheap, and it is the front door to the DO |
 | Durable Object `SessionRoom` | the event log, replay, authority, attribution, inference orchestration | Single writer. See [`src/session-do.ts`](../../src/session-do.ts) |
 | Node sidecar (Railway) | 0G Storage uploads, Hedera SDK writes | Both need gRPC and Node internals a Worker does not have |
@@ -75,10 +75,17 @@ product claims stop being true?**
 
 A Selfie Check proof, verified server-side, is what turns a visitor into a seat.
 The sybil score sets the tier; below the threshold a real proof still only earns
-Observer. Wallet sign-in exists as an alternative, and is deliberately weaker —
-a signature proves key control, never uniqueness, so those seats cap at Builder
-and are labelled as such. Without World, one person can hold every seat and the
-cap table means nothing.
+Observer. Without World, one person can hold every seat and the cap table means
+nothing.
+
+Wallet sign-in is the second way in. A signature proves key control, never
+uniqueness, so it is the weaker claim — but a wallet seat is granted **Signer**,
+because a crew that signs in this way still has to be able to co-sign, and a
+Builder cannot. The difference is recorded rather than hidden: the log carries
+`method: "wallet"` on the grant, `Seat.signerVia` distinguishes it from an Orb
+delegation on replay, and the crew list badges it *wallet signer ·
+not sybil-checked*. Anyone auditing the cap table can therefore separate
+sybil-resistant signatures from key-control ones without guessing.
 
 ### ENS — identity and provenance
 
@@ -128,7 +135,9 @@ The Hedera SDK needs gRPC, which is the other half of why the sidecar exists.
 
 - The sidecar is a second deployment target, so a Railway outage costs archive
   writes and Hedera writes while the session itself keeps running.
-- Wallet seats are weaker than World seats by design; the UI says so rather than
-  averaging the two into one misleading badge.
+- Wallet seats can co-sign but carry no proof of a unique person. Two wallets in
+  one pair of hands can therefore merge a contribution. The UI and the log both
+  say which signatures were sybil-checked; the guarantee is auditability, not
+  prevention.
 - ENS subname issuance still needs an owner-signed transaction; automating it
   means granting the app's key the registrar role on the parent's registry.

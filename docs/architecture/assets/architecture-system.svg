@@ -46,6 +46,7 @@
   .amberBox { fill: #fef3c7; stroke: #f59e0b; stroke-width: 1.4; rx: 12; }
   .chainBox { fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.2; rx: 14; filter: url(#softShadow); }
   .tagBox { fill: #ffffff; stroke: #94a3b8; stroke-width: 1.2; }
+  .dashed { fill: #ffffff; fill-opacity: .55; stroke: #cbd5e1; stroke-width: 1.2; stroke-dasharray: 6 5; rx: 14; }
   .flow { fill: none; stroke: #475569; stroke-width: 2.2; }
   .flowAmber { fill: none; stroke: #b45309; stroke-width: 2.2; }
   .flowGreen { fill: none; stroke: #15803d; stroke-width: 2.2; }
@@ -60,25 +61,27 @@
 <text x="100" y="250" text-anchor="start" class="body"><tspan x="100" dy="0">One seat per person.</tspan><tspan x="100" dy="20">Signer · Builder · Observer</tspan></text>
 <rect class="plain" x="80" y="322" width="240" height="92"/>
 <text x="200.0" y="352" text-anchor="middle" class="smallLabel"><tspan x="200.0" dy="0">Wallet holder</tspan></text>
-<text x="100" y="376" text-anchor="start" class="body"><tspan x="100" dy="0">ENS name as login.</tspan><tspan x="100" dy="20">Builder at most.</tspan></text>
+<text x="100" y="376" text-anchor="start" class="body"><tspan x="100" dy="0">ENS name as login.</tspan><tspan x="100" dy="18">May co-sign; not</tspan><tspan x="100" dy="18">sybil-checked.</tspan></text>
 <rect class="plain" x="80" y="434" width="240" height="92"/>
 <text x="200.0" y="464" text-anchor="middle" class="smallLabel"><tspan x="200.0" dy="0">Client / employer</tspan></text>
 <text x="100" y="488" text-anchor="start" class="body"><tspan x="100" dy="0">Hires the agent,</tspan><tspan x="100" dy="20">pays per job.</tspan></text>
-<rect class="groupClient" x="400" y="150" width="400" height="620"/>
+<rect class="groupClient" x="400" y="150" width="400" height="626"/>
 <text x="426" y="184" text-anchor="start" class="sectionName"><tspan x="426" dy="0">BROWSER  ·  React + assistant-ui</tspan></text>
-<rect class="blueBox" x="430" y="196" width="340" height="116"/>
-<text x="600.0" y="226" text-anchor="middle" class="smallLabel"><tspan x="600.0" dy="0">Session thread</tspan></text>
-<text x="450" y="250" text-anchor="start" class="body"><tspan x="450" dy="0">Streaming chat. Token deltas</tspan><tspan x="450" dy="20">never touch the event log.</tspan></text>
-<rect class="blueBox" x="430" y="330" width="340" height="116"/>
-<text x="600.0" y="360" text-anchor="middle" class="smallLabel"><tspan x="600.0" dy="0">Crew rail</tspan></text>
-<text x="450" y="384" text-anchor="start" class="body"><tspan x="450" dy="0">Live seats, tiers, event feed,</tspan><tspan x="450" dy="20">HCS ticker with HashScan links.</tspan></text>
-<rect class="blueBox" x="430" y="464" width="340" height="110"/>
-<text x="600.0" y="494" text-anchor="middle" class="smallLabel"><tspan x="600.0" dy="0">Review sheet</tspan></text>
-<text x="450" y="518" text-anchor="start" class="body"><tspan x="450" dy="0">Mid- and end-session harvest.</tspan><tspan x="450" dy="20">Two signers merge a contribution.</tspan></text>
-<rect class="plain" x="430" y="592" width="340" height="68"/>
-<text x="600.0" y="622" text-anchor="middle" class="smallLabel"><tspan x="600.0" dy="0">Agent CV  /cv/&lt;name&gt;</tspan></text>
-<rect class="plain" x="430" y="676" width="340" height="68"/>
-<text x="600.0" y="706" text-anchor="middle" class="smallLabel"><tspan x="600.0" dy="0">Subname console  /ens-admin</tspan></text>
+<rect class="blueBox" x="430" y="190" width="340" height="116"/>
+<text x="600.0" y="220" text-anchor="middle" class="smallLabel"><tspan x="600.0" dy="0">Session thread</tspan></text>
+<text x="450" y="244" text-anchor="start" class="body"><tspan x="450" dy="0">Streaming chat. Token deltas</tspan><tspan x="450" dy="20">never touch the event log.</tspan></text>
+<rect class="blueBox" x="430" y="322" width="340" height="116"/>
+<text x="600.0" y="352" text-anchor="middle" class="smallLabel"><tspan x="600.0" dy="0">Crew rail</tspan></text>
+<text x="450" y="376" text-anchor="start" class="body"><tspan x="450" dy="0">Live seats, tiers, event feed,</tspan><tspan x="450" dy="20">HCS ticker with HashScan links.</tspan></text>
+<rect class="blueBox" x="430" y="454" width="340" height="116"/>
+<text x="600.0" y="484" text-anchor="middle" class="smallLabel"><tspan x="600.0" dy="0">Review sheet</tspan></text>
+<text x="450" y="508" text-anchor="start" class="body"><tspan x="450" dy="0">Mid- and end-session harvest.</tspan><tspan x="450" dy="20">Two signers merge a contribution.</tspan></text>
+<rect class="dashed" x="424" y="588" width="352" height="164"/>
+<text x="440" y="612" text-anchor="start" class="tiny"><tspan x="440" dy="0">STANDALONE PAGES  ·  no session, no seat</tspan></text>
+<rect class="plain" x="438" y="624" width="324" height="56"/>
+<text x="600.0" y="654" text-anchor="middle" class="smallLabel"><tspan x="600.0" dy="0">Agent CV  /cv/&lt;name&gt;</tspan></text>
+<rect class="plain" x="438" y="690" width="324" height="56"/>
+<text x="600.0" y="720" text-anchor="middle" class="smallLabel"><tspan x="600.0" dy="0">Subname console  /ens-admin</tspan></text>
 <rect class="groupCore" x="850" y="150" width="470" height="620"/>
 <text x="876" y="184" text-anchor="start" class="sectionName"><tspan x="876" dy="0">CLOUDFLARE  ·  edge</tspan></text>
 <rect class="plain" x="880" y="196" width="410" height="86"/>
@@ -150,14 +153,14 @@
 <text x="1211.0" y="908" text-anchor="middle" class="smallLabel"><tspan x="1211.0" dy="0">Pay</tspan></text>
 <text x="1134" y="932" text-anchor="start" class="tiny"><tspan x="1134" dy="0">Job settles along</tspan><tspan x="1134" dy="19">use + ownership.</tspan></text>
 <text x="86" y="1034" text-anchor="start" class="body"><tspan x="86" dy="0">The archive keeps everything. The brain keeps only what was accepted — that gap is the product, not a limitation.</tspan></text>
-<path class="flow" d="M320,249 L428,249" marker-end="url(#arrow)"/>
-<path class="flow" d="M772,254 L878,239" marker-end="url(#arrow)"/>
-<rect class="tagBox" x="786" y="200" width="198" height="26" rx="13"/>
-<text x="885.1" y="218" text-anchor="middle" class="flowTag"><tspan x="885.1" dy="0">1 · WebSocket intents</tspan></text>
+<path class="flow" d="M320,243 L428,243" marker-end="url(#arrow)"/>
+<path class="flow" d="M772,248 L878,239" marker-end="url(#arrow)"/>
+<rect class="tagBox" x="786" y="196" width="198" height="26" rx="13"/>
+<text x="885.1" y="214" text-anchor="middle" class="flowTag"><tspan x="885.1" dy="0">1 · WebSocket intents</tspan></text>
 <path class="flow" d="M1085,284 L1085,304" marker-end="url(#arrow)"/>
-<path class="flow" d="M878,420 L774,388" marker-end="url(#arrow)"/>
-<rect class="tagBox" x="786" y="336" width="157" height="26" rx="13"/>
-<text x="864.6" y="354" text-anchor="middle" class="flowTag"><tspan x="864.6" dy="0">2 · token deltas</tspan></text>
+<path class="flow" d="M878,420 L774,382" marker-end="url(#arrow)"/>
+<rect class="tagBox" x="786" y="330" width="157" height="26" rx="13"/>
+<text x="864.6" y="348" text-anchor="middle" class="flowTag"><tspan x="864.6" dy="0">2 · token deltas</tspan></text>
 <path class="flowGreen" d="M1394,262 L1292,240" marker-end="url(#arrowGreen)"/>
 <path class="flowGreen" d="M1394,486 L1292,452" marker-end="url(#arrowGreen)"/>
 <path class="flowGreen" d="M1394,700 L1294,618" marker-end="url(#arrowGreen)"/>

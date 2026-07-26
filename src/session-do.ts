@@ -734,19 +734,32 @@ export class SessionRoom extends DurableObject<Env> {
       { system: true }
     );
 
-    // A dev-bypassed seat becomes a Signer immediately. The dev path exists so
-    // the crew can rehearse the whole arc, and stopping at Builder blocks it —
-    // co-signing needs two Signers, so a Builder-only dev seat can reach
-    // nothing. Granted here rather than by a follow-up delegate message so the
-    // two events cannot interleave with another handler.
-    if (claims.dev && grantedTier !== "T1") {
+    // Two paths reach Signer without an Orb proof, and both are granted here
+    // rather than by a follow-up delegate message so the pair of events cannot
+    // interleave with another handler.
+    //
+    //  - DEV bypass: the crew has to be able to rehearse the whole arc, and
+    //    co-signing needs two Signers, so a Builder-only dev seat reaches
+    //    nothing.
+    //  - WALLET: a signature proves key control, not unique humanity. It is
+    //    still the weaker claim, and the log records `method: "wallet"` so a
+    //    reader can tell the two apart — but the crew asked for wallet holders
+    //    to be able to co-sign, and a Builder cannot.
+    const signerGrant: "world" | "wallet" | null = claims.dev
+      ? "world"
+      : claims.method === "wallet"
+        ? "wallet"
+        : null;
+
+    if (signerGrant && grantedTier !== "T1") {
       await this.emit(
         "verify.agentkit.ok",
         {
           seat: seatId,
           proofRef: claims.nullifierHash,
           principal: claims.nullifierHash,
-          dev: true,
+          dev: claims.dev,
+          method: signerGrant,
         },
         { system: true }
       );
