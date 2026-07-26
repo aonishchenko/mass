@@ -918,8 +918,10 @@ export class SessionRoom extends DurableObject<Env> {
         lane,
         text: result.text,
         // What this answer actually drew on — validated chunk ids, the input
-        // to the 70% use share at settlement.
+        // to the 70% use share at settlement. The candidate set goes with it,
+        // so a chunk that was retrieved but not quoted can still earn its floor.
         usedChunkIds: result.usedChunkIds,
+        candidateChunkIds: result.candidateChunkIds,
         // Present ONLY when the provider actually returned an attestation.
         attestationRef: result.attestationRef,
         // Always true, never a proof: which endpoint/model/response produced it.

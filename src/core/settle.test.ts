@@ -69,3 +69,40 @@ describe("settlement", () => {
     expect(toHbar(100n * HBAR)).toBe("100.0000");
   });
 });
+
+describe("a statement has to add up to the job it describes", () => {
+  // Every one of these lost tinybar before the lines were taken from the
+  // splitter's own breakdown: two independent divisions of the same pot
+  // disagree by the remainder, and the no-usage case lost the entire 70%.
+  const cases: { what: string; amountTinybar: bigint; usage: Record<string, number> }[] = [
+    { what: "a clean amount", amountTinybar: 100n * HBAR, usage: { alice: 1 } },
+    { what: "an amount that does not divide", amountTinybar: 1n * HBAR + 7n, usage: { alice: 1, bob: 2 } },
+    { what: "floor-only weights", amountTinybar: 33_333_333n, usage: { alice: 0.15, bob: 0.15 } },
+    { what: "a job that cited nothing", amountTinybar: 100n * HBAR, usage: {} },
+  ];
+
+  for (const c of cases) {
+    it(`reconciles exactly: ${c.what}`, () => {
+      const s = settle({ ...base, amountTinybar: c.amountTinybar, usage: c.usage });
+      const sum = s.lines.reduce((t, l) => t + l.amountTinybar, 0n);
+      expect(sum).toBe(c.amountTinybar);
+      // Nothing is payable yet, so everything must be held — not absorbed.
+      expect(s.heldTinybar).toBe(c.amountTinybar);
+    });
+
+    it(`explains every tinybar it pays: ${c.what}`, () => {
+      const s = settle({ ...base, amountTinybar: c.amountTinybar, usage: c.usage });
+      for (const l of s.lines) {
+        expect(l.fromUse + l.fromOwnership).toBe(l.amountTinybar);
+      }
+    });
+  }
+
+  it("pays out the use pot through ownership when a job cited nothing", () => {
+    // The splitter folds the unclaimed use pot into ownership rather than
+    // stranding it; the statement has to say the same thing.
+    const s = settle({ ...base, usage: {} });
+    expect(s.lines.reduce((t, l) => t + l.fromUse, 0n)).toBe(0n);
+    expect(s.lines.reduce((t, l) => t + l.fromOwnership, 0n)).toBe(100n * HBAR);
+  });
+});

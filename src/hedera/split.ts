@@ -25,8 +25,17 @@ export interface SplitInput {
   dustThresholdTinybar?: bigint;
 }
 
+/** One seat's cut, and which half of the rule each part came from. */
+export interface SplitShare {
+  fromUse: bigint;
+  fromOwnership: bigint;
+  total: bigint;
+}
+
 export interface SplitResult {
   transfers: { seat: string; accountId: string; amountTinybar: bigint }[];
+  /** Per-seat breakdown of the same distribution, exact and reconciling. */
+  shares: Record<string, SplitShare>;
   pooledRemainder: bigint;
   /** For the reconciliation check (§5.3). */
   total: bigint;
@@ -93,12 +102,22 @@ export function splitPayment(input: SplitInput): SplitResult {
   );
 
   const combined: Record<string, bigint> = {};
-  for (const [seat, v] of Object.entries(authorShares)) {
-    combined[seat] = (combined[seat] ?? 0n) + v;
-  }
-  for (const [seat, v] of Object.entries(holderShares)) {
-    combined[seat] = (combined[seat] ?? 0n) + v;
-  }
+  // The same numbers, kept split by WHY they were earned. The statement shown
+  // to a contributor is built from these rather than recomputed: two
+  // independent divisions of the same pot disagree by the rounding remainder,
+  // and a payroll whose explanation does not add up to its total is not one
+  // anybody should trust.
+  const shares: Record<string, SplitShare> = {};
+  const credit = (seat: string, amount: bigint, key: "fromUse" | "fromOwnership") => {
+    combined[seat] = (combined[seat] ?? 0n) + amount;
+    const s = (shares[seat] ??= { fromUse: 0n, fromOwnership: 0n, total: 0n });
+    s[key] += amount;
+    s.total += amount;
+  };
+  for (const [seat, v] of Object.entries(authorShares)) credit(seat, v, "fromUse");
+  // When nothing was used, the use pot was folded into the ownership pot above,
+  // so it is ownership that pays it out — and it is reported as such.
+  for (const [seat, v] of Object.entries(holderShares)) credit(seat, v, "fromOwnership");
 
   const transfers: SplitResult["transfers"] = [];
   let pooled = 0n;
@@ -113,7 +132,7 @@ export function splitPayment(input: SplitInput): SplitResult {
     transfers.push({ seat, accountId, amountTinybar: amt });
   }
 
-  return { transfers, pooledRemainder: pooled, total: amount };
+  return { transfers, pooledRemainder: pooled, total: amount, shares };
 }
 
 /**

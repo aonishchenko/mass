@@ -55,6 +55,13 @@ export interface RunResult {
    */
   usedChunkIds?: string[];
   /**
+   * Everything that WAS in front of the model for this answer. Recorded
+   * because the floor weight is meaningless without it: a contributor whose
+   * chunk was retrieved but not cited earns FLOOR rather than nothing, and
+   * that cannot be worked out later from the cited ids alone.
+   */
+  candidateChunkIds?: string[];
+  /**
    * A TEE attestation, and ONLY a real one. Present when the provider actually
    * returned an attestation for this response; absent otherwise. We never
    * synthesize a value here — a proof chip that opens a self-issued id proves
@@ -289,7 +296,15 @@ export async function runInference(
   // the reader should never see them. Validation happens inside citedChunkIds —
   // only ids we actually offered can come back out.
   const usedChunkIds = citedChunkIds(text, brainChunks);
-  return { text: stripMarkers(text), usedChunkIds, sealed, attestationRef, zgRunRef };
+  const candidateChunkIds = brainChunks.map((c) => c.chunkId);
+  return {
+    text: stripMarkers(text),
+    usedChunkIds,
+    candidateChunkIds,
+    sealed,
+    attestationRef,
+    zgRunRef,
+  };
 }
 
 /**

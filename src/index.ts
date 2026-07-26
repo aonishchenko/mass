@@ -116,7 +116,8 @@ export default {
       url.pathname === "/api/state" ||
       isVerify ||
       isEns ||
-      isAgent
+      isAgent ||
+      isSettlement
     ) {
       const search = url.searchParams;
       if (!search.get("session")) search.set("session", "default");

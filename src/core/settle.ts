@@ -17,7 +17,7 @@
  */
 
 import { splitPayment, type SplitResult } from "../hedera/split.js";
-import type { UsageLine } from "./attribution.js";
+import { FLOOR, type UsageLine } from "./attribution.js";
 
 export interface SettlementInput {
   /** What the job paid, in tinybar. */
@@ -79,40 +79,32 @@ export function settle(input: SettlementInput, usageDetail: UsageLine[] = []): S
     accounts: input.accounts ?? {},
   });
 
-  const usePot = (input.amountTinybar * USE_BPS) / 10_000n;
-  const ownPot = input.amountTinybar - usePot;
-  const useTotal = Object.values(input.usage).reduce((a, b) => a + b, 0);
-  const ownTotal = Object.values(input.capTable).reduce((a, b) => a + b, 0);
-
-  const seats = new Set([...Object.keys(input.usage), ...Object.keys(input.capTable)]);
-
+  // Every number below comes from that one distribution. Recomputing the two
+  // pots here with independent divisions lost the rounding remainder — and,
+  // when a job cited nothing, lost the entire 70% use pot, because the splitter
+  // folds it into ownership and this did not. A statement that does not add up
+  // to the job it describes is worse than no statement.
   const lines: SettlementLine[] = [];
   let held = 0n;
 
-  for (const seat of seats) {
-    const fromUse =
-      useTotal > 0 ? (usePot * BigInt(Math.round((input.usage[seat] ?? 0) * 1000))) / BigInt(Math.round(useTotal * 1000)) : 0n;
-    const fromOwnership =
-      ownTotal > 0 ? (ownPot * BigInt(input.capTable[seat] ?? 0)) / BigInt(ownTotal) : 0n;
+  for (const [seat, share] of Object.entries(split.shares)) {
+    if (share.total <= 0n) continue;
 
     const paid = split.transfers.find((t) => t.seat === seat);
-    const amount = paid?.amountTinybar ?? fromUse + fromOwnership;
-    if (amount <= 0n) continue;
-
     const hasAccount = Boolean(input.accounts?.[seat]);
     const status: SettlementLine["status"] = paid
       ? "payable"
       : hasAccount
         ? "held-below-minimum"
         : "held-no-account";
-    if (!paid) held += amount;
+    if (!paid) held += share.total;
 
     lines.push({
       seat,
       name: input.names[seat] ?? seat,
-      amountTinybar: amount,
-      fromUse,
-      fromOwnership,
+      amountTinybar: share.total,
+      fromUse: share.fromUse,
+      fromOwnership: share.fromOwnership,
       status,
     });
   }
@@ -162,17 +154,27 @@ export const rateCardLine = () =>
 export function settlementForLastJob(session: {
   events: { type: string; payload?: unknown }[];
   seats: Record<string, { name: string; ensName?: string }>;
+  brainChunks?: { chunkId: string; contributor: string }[];
   contributions?: Record<string, { contribId: string; state: string }>;
 }, capTable: Record<string, number>, seatOfChunk: Record<string, string>) {
   const jobs = session.events.filter((e) => e.type === "canonical.completed");
   const last = jobs[jobs.length - 1];
   if (!last) return undefined;
 
-  const used = ((last.payload as { usedChunkIds?: string[] })?.usedChunkIds ?? []);
+  const p = last.payload as { usedChunkIds?: string[]; candidateChunkIds?: string[] };
+  const used = new Set(p?.usedChunkIds ?? []);
+  // Everything the model could see, not only what it quoted. A small model
+  // under-cites, and a contributor whose knowledge was in front of it should
+  // not be zeroed out by the model forgetting to name them — they earn FLOOR
+  // rather than nothing (core/attribution.ts). Older jobs recorded no candidate
+  // set, so they fall back to the cited ids alone.
+  const candidates = p?.candidateChunkIds?.length ? p.candidateChunkIds : [...used];
+
   const usage: Record<string, number> = {};
-  for (const chunkId of used) {
+  for (const chunkId of candidates) {
     const seat = seatOfChunk[chunkId];
-    if (seat) usage[seat] = (usage[seat] ?? 0) + 1;
+    if (!seat) continue;
+    usage[seat] = (usage[seat] ?? 0) + (used.has(chunkId) ? 1 : FLOOR);
   }
 
   const names: Record<string, string> = {};
@@ -180,10 +182,27 @@ export function settlementForLastJob(session: {
     names[seatId] = seat.ensName ?? seat.name;
   }
 
-  return settle({
-    amountTinybar: RATE_CARD.priceTinybar,
-    usage,
-    capTable,
-    names,
-  });
+  // The per-chunk working, so a contributor can check the split rather than
+  // take it on faith — which is the whole reason the number is computed from
+  // the log in the first place.
+  const contributorOf = new Map((session.brainChunks ?? []).map((c) => [c.chunkId, c.contributor]));
+  const detail: UsageLine[] = candidates
+    .filter((chunkId) => seatOfChunk[chunkId])
+    .map((chunkId) => ({
+      chunkId,
+      seat: seatOfChunk[chunkId],
+      contributor: contributorOf.get(chunkId) ?? seatOfChunk[chunkId],
+      cited: used.has(chunkId),
+      weight: used.has(chunkId) ? 1 : FLOOR,
+    }));
+
+  return settle(
+    {
+      amountTinybar: RATE_CARD.priceTinybar,
+      usage,
+      capTable,
+      names,
+    },
+    detail
+  );
 }
