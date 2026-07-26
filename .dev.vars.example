@@ -103,3 +103,18 @@ HEDERA_CAPTABLE_TOKEN_ID=
 ERC8004_CHAIN_ID=84532
 ERC8004_REGISTRY=
 ERC8004_AGENT_ID=
+
+# --- ENS v2 write path (issuing subnames for real) -------------------------
+# The PermissionedRegistry that issues subnames under ENS_PARENT_NAME, and the
+# resolver new subnames are pointed at (where text records are written).
+ENS_REGISTRY_ADDRESS=
+ENS_RESOLVER_ADDRESS=
+# Chain + RPC for that registry. Default 84532 (Base Sepolia).
+ENS_REGISTRY_CHAIN_ID=84532
+ENS_REGISTRY_RPC=
+# Key holding the registrar role on that registry. SECRET — throwaway wallet.
+ENS_REGISTRAR_KEY=
+# Role bitmap granted to a new subname's owner. Registry-specific.
+ENS_ROLE_BITMAP=0
+# Seconds a subname is registered for. Default one year.
+ENS_SUBNAME_TTL=31536000
