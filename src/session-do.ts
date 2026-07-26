@@ -1093,13 +1093,11 @@ export class SessionRoom extends DurableObject<Env> {
   /**
    * Conversation history for a chat turn.
    *
-   * Interview turns are EXCLUDED. Their prompt tells the agent not to refuse,
-   * and leaving them in history carried that permission into ordinary
-   * questions: with an empty brain the agent answered "the capital of Peru is
-   * Lima" instead of "I haven't been taught that yet". That refusal is the
-   * product's whole argument, so it must not be softened by a build-path
-   * detour. Both sides of the exchange go — the answer and the agent's reply
-   * to it.
+   * Interview turns are EXCLUDED. A build-path turn is the crew answering the
+   * agent's question, and its framing is specific to that slot; carried into
+   * ordinary history it steers later answers back towards the interview and
+   * produces the parroting the crew complained about. Both sides of the
+   * exchange go — the answer and the agent's reply to it.
    */
   private recentTurns(): { role: "user" | "assistant"; content: string }[] {
     const interviewRuns = new Set<string>();

@@ -168,21 +168,42 @@ const UserMessage: FC<{
   );
 };
 
-/** Must match UNTAUGHT in src/zg/inference.ts — the prompt and the UI agree. */
-const UNTAUGHT_MARKER = "haven't been taught that yet";
+/**
+ * An answer with no citation used nothing this crew taught.
+ *
+ * This replaces matching on a fixed refusal sentence. The agent now answers
+ * whether or not it has been taught, so "did anything here come from us?" is
+ * the honest question, and the absence of a citation is the honest signal —
+ * derived from the answer itself rather than from a magic string the prompt had
+ * to reproduce exactly.
+ */
+const hasCitation = (text: string) => CITATION.test(text);
 
 /**
  * The refusal is the pitch. When the agent says it has not been taught
  * something, the next thing on screen is the way to teach it — refuse, teach,
  * answer with a citation is the whole demo in three clicks.
  */
+/**
+ * Offered on any answer that cites nothing.
+ *
+ * The wording is deliberately about provenance rather than ability: the agent
+ * could answer, it just answered from general knowledge, and nobody earns a
+ * share of that. Teaching it is what turns an answer into something the crew
+ * owns and gets cited for.
+ */
 const TeachItNow: FC<{ onFocusTeach: () => void }> = ({ onFocusTeach }) => (
-  <button
-    onClick={onFocusTeach}
-    className="mt-3 flex items-center gap-1.5 rounded-lg bg-[var(--color-accent)] px-3 py-1.5 text-[13px] text-white transition-opacity hover:opacity-85"
-  >
-    <SproutIcon size={13} /> Teach it now
-  </button>
+  <div className="mt-3 flex items-center gap-2">
+    <button
+      onClick={onFocusTeach}
+      className="flex items-center gap-1.5 rounded-lg bg-[var(--color-accent)] px-3 py-1.5 text-[13px] text-white transition-opacity hover:opacity-85"
+    >
+      <SproutIcon size={13} /> Teach it now
+    </button>
+    <span className="text-[11.5px] text-[var(--color-faint)]">
+      nothing here came from the crew — teach it and it gets cited
+    </span>
+  </div>
 );
 
 const AssistantMessage: FC<{
@@ -192,7 +213,10 @@ const AssistantMessage: FC<{
   const text = useMessage((m) =>
     m.content.map((p) => (p.type === "text" ? p.text : "")).join("")
   );
-  const untaught = text.includes(UNTAUGHT_MARKER);
+  // CITATION is a global regex; lastIndex survives between calls, so it is
+  // reset before each test. Without this, every other answer reads as uncited.
+  CITATION.lastIndex = 0;
+  const uncited = text.trim().length > 0 && !hasCitation(text);
 
   return (
     <MessagePrimitive.Root className="mx-auto w-full max-w-3xl px-4 py-3">
@@ -201,7 +225,7 @@ const AssistantMessage: FC<{
           components={{ Text: ({ text }) => <AgentMarkdown text={text} /> }}
         />
       </div>
-      {untaught && <TeachItNow onFocusTeach={onFocusTeach} />}
+      {uncited && <TeachItNow onFocusTeach={onFocusTeach} />}
       {!view.brainRoot && view.brainPending && (
         <p className="pt-2 text-xs text-[var(--color-faint)]">saving the brain…</p>
       )}

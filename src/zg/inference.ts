@@ -101,42 +101,38 @@ export function citationSystemPrompt(chunks: BrainChunk[]): Msg {
     ? `(per ${chunks[0].contributor}'s contribution #${chunks[0].contribNumber})`
     : "(per alice's contribution #1)";
 
-  // RULE 2 is omitted when the brain is empty. Measured: with it present and no
-  // chunks, "What is the capital of Peru?" answered "Lima"; without it, the
-  // agent refused correctly. The citation rule and its worked example imply
-  // there IS material to cite, which competes with the refusal rule — and the
-  // refusal is the product's whole argument, so it must win when there is
-  // nothing to cite.
+  // Omitted when the brain is empty: the rule and its worked example imply
+  // there is material to cite, and a model handed that implication with nothing
+  // to cite will invent a contributor. An invented citation is the one failure
+  // this product cannot survive, so the rule only exists when it can be obeyed.
   const citationRule = chunks.length
-    ? "RULE 2: when your answer uses information from a brain chunk, you MUST " +
+    ? "RULE 2: this is the one rule you may never bend. When your answer uses " +
+      "information from a brain chunk, you MUST " +
       "write TWO things immediately after that information: the chunk's " +
       `double-bracket marker exactly as shown (e.g. ${markerFor(chunks[0].chunkId)}), ` +
       `then the human citation ${example} — copying the exact name and number ` +
       "from that chunk's brackets. Never write a marker, name or number that is " +
-      "not listed above.\n"
+      "not listed above, and never cite anything you did not take from the " +
+      "brain. A citation is a claim that a named human taught you this; " +
+      "inventing one is worse than not citing at all.\n"
     : "";
 
   return {
     role: "system",
     content:
-      "You are a team member built by a crew of humans.\n\nYOUR BRAIN:\n" +
-      (brain || "(empty — you have not been taught anything yet)") +
-      "\n\nRULE 1: answer ONLY from the brain above. If the answer is not in it, " +
-      `reply with exactly this and nothing else:\n"${UNTAUGHT}"\n` +
-      "Never answer from your own training data. Never pad with generic advice. " +
-      "Never mention your training cutoff.\n" +
+      "You are a capable team member built by a crew of humans.\n\nYOUR BRAIN — what this crew has taught you:\n" +
+      (brain || "(empty — this crew has not taught you anything yet)") +
+      "\n\nRULE 1: answer the question properly. Use the brain above when it is " +
+      "relevant, and your own knowledge and judgement for everything else. Be " +
+      "genuinely useful: give the concrete answer, the worked example, the real " +
+      "trade-off. Do not refuse because the brain is empty, and do not tell the " +
+      "user what you have or have not been taught — the interface already shows " +
+      "them that.\n" +
       citationRule +
       "RULE 3: be brief. Answer in a few sentences unless asked for more.",
   };
 }
 
-/**
- * The exact refusal. The UI matches on this string to offer "Teach it now", so
- * it is a contract between the prompt and the client — change both together.
- *
- * This sentence is also the product's whole argument in one line: the agent
- * knows what this crew taught it, and nothing else.
- */
 /**
  * Framing for a build-path turn.
  *
@@ -165,9 +161,6 @@ export const interviewFraming = (slot: string): Msg => ({
     "Do NOT cite anyone. Do not claim anything is saved.\n" +
     "Be brief: a few sentences.",
 });
-
-export const UNTAUGHT =
-  "I haven't been taught that yet. Teach me and I'll know it next time.";
 
 /**
  * Capped on purpose. Uncapped, the model answered a simple question with a
@@ -211,28 +204,23 @@ export async function runInference(
   }
 
   const model = lane === "canonical" ? env.ZG_CANONICAL_MODEL : env.ZG_DRAFT_MODEL;
-  // BOTH lanes answer from the brain only. An agent that answers from its
-  // training data in quick mode and from the crew's knowledge in careful mode
-  // is two different colleagues, and the refuse-teach-answer beat only works if
-  // "I haven't been taught that" can happen in the mode people actually use.
   /**
-   * An untaught agent refuses deterministically, without asking the model.
+   * The agent answers at full strength, taught or not.
    *
-   * "It knows only what this crew taught it" is the product's central claim, so
-   * it cannot rest on a small model obeying a prompt rule. Measured against
-   * qwen2.5-omni, the identical prompt refused on one run and answered "the
-   * capital of Peru is Lima" on the next — the wording was never the problem,
-   * the non-determinism was.
+   * This used to refuse deterministically whenever the brain was empty, so that
+   * "it knows only what this crew taught it" could not depend on a small model
+   * obeying a prompt. That guarantee was real, and it cost too much: a crew
+   * evaluating the agent on day zero got a wall instead of a colleague, and an
+   * assistant that cannot answer until it has been taught gives nobody a reason
+   * to teach it.
    *
-   * With an empty brain there is nothing to answer FROM, so there is nothing to
-   * ask. Once chunks exist the model does the work and the prompt rules apply.
-   * Interview turns are exempt: they are answers, not questions.
+   * The claim the product actually needs is narrower and still fully enforced:
+   * a CITATION names a human who taught something, and a citation is never
+   * invented. Untaught answers simply carry none, the interface says so, and
+   * the cap table only ever moves on accepted contributions. What the crew
+   * taught remains visible and attributable — it is no longer the only thing
+   * the agent is allowed to say.
    */
-  if (!interviewSlot && brainChunks.length === 0) {
-    for (const word of UNTAUGHT.split(" ")) onToken(word + " ");
-    return { text: UNTAUGHT, sealed };
-  }
-
   const full = interviewSlot
     ? [interviewFraming(interviewSlot), ...messages]
     : [citationSystemPrompt(brainChunks), ...messages];
