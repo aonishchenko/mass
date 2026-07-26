@@ -6,18 +6,17 @@
  * not lose or invent tinybars to floating point.
  */
 
-export interface Citation {
-  file: string;
-  lineStart: number;
-  lineEnd: number;
-  /** Seat credited with authoring the cited lines. */
-  seat: string;
-}
-
 export interface SplitInput {
   amountTinybar: bigint;
-  /** Citations the job actually drew on — drives the authorship share. */
-  citations: Citation[];
+  /**
+   * Per-seat usage weight for THIS job, from core/attribution.ts.
+   *
+   * Replaces an earlier `Citation[]` of {file, lineStart, lineEnd} — a
+   * git-file model that nothing in this codebase could ever produce, because
+   * our knowledge units are event-log chunks, not line ranges in files. Usage
+   * is now measured against the chunks actually put in front of the model.
+   */
+  usage: Record<string, number>;
   /** seat -> accepted contributions, the cap table (reduce.ts capTable). */
   capTable: Record<string, number>;
   /** seat -> hedera account. A seat without one accrues to the pool. */
@@ -36,7 +35,7 @@ export interface SplitResult {
 /** 0.1 HBAR. */
 export const DEFAULT_DUST = 10_000_000n;
 
-/** 70% follows citations, 30% follows the cap table. */
+/** 70% follows USE, 30% follows OWNERSHIP. */
 export const AUTHORSHIP_BPS = 7000n;
 export const HOLDER_BPS = 3000n;
 
@@ -73,17 +72,19 @@ export function splitPayment(input: SplitInput): SplitResult {
   const dust = input.dustThresholdTinybar ?? DEFAULT_DUST;
   const amount = input.amountTinybar;
 
-  // Weight authorship by how often the job actually cited each seat.
+  // Usage arrives already weighted per seat (cited chunks full, retrieved
+  // chunks a floor) — see core/attribution.ts. Scaled to integers here because
+  // the distribution below is deliberately integer-only.
   const citationWeights: Record<string, number> = {};
-  for (const c of input.citations) {
-    citationWeights[c.seat] = (citationWeights[c.seat] ?? 0) + 1;
+  for (const [seat, w] of Object.entries(input.usage)) {
+    if (w > 0) citationWeights[seat] = Math.round(w * 1000);
   }
 
   const authorshipPot = (amount * AUTHORSHIP_BPS) / 10_000n;
   const holderPot = amount - authorshipPot; // remainder stays here, never lost
 
-  // With no citations the authorship pot has no claimants; fold it into the
-  // holder pot rather than stranding it.
+  // With no usage recorded the use pot has no claimants; fold it into the
+  // ownership pot rather than stranding it.
   const hasCitations = Object.keys(citationWeights).length > 0;
   const authorShares = hasCitations ? distribute(authorshipPot, citationWeights) : {};
   const holderShares = distribute(

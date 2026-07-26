@@ -17,6 +17,7 @@
 
 import { capTable } from "../core/reduce.js";
 import { agentRegistrationKey } from "./erc7930.js";
+import { rateCardLine } from "../core/settle.js";
 import type { Session } from "../core/types.js";
 
 // ---------------------------------------------------------------------------

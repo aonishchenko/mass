@@ -6,6 +6,7 @@
  * measured (§8.3).
  */
 
+import { citedChunkIds, markerFor, stripMarkers } from "../core/attribution.js";
 import type { BrainChunk, Lane } from "../core/types.js";
 
 export class SealedUnavailable extends Error {
@@ -48,6 +49,12 @@ export interface Msg {
 export interface RunResult {
   text: string;
   /**
+   * Chunk ids this answer genuinely drew on — every one validated against the
+   * chunks we actually put in the prompt, so an invented citation earns
+   * nobody anything (core/attribution.ts).
+   */
+  usedChunkIds?: string[];
+  /**
    * A TEE attestation, and ONLY a real one. Present when the provider actually
    * returned an attestation for this response; absent otherwise. We never
    * synthesize a value here — a proof chip that opens a self-issued id proves
@@ -70,8 +77,12 @@ export interface RunResult {
  * Draft gets none of this — an unattested run must not attribute credit (§6.2).
  */
 export function citationSystemPrompt(chunks: BrainChunk[]): Msg {
+  // Each chunk carries an opaque marker as well as its human label. The label
+  // is what a reader sees; the MARKER is what attribution — and therefore
+  // money — is keyed on, because display names collide and change while a
+  // chunk id does not. See core/attribution.ts.
   const brain = chunks
-    .map((c) => `[${c.contributor} #${c.contribNumber}] ${c.content}`)
+    .map((c) => `${markerFor(c.chunkId)} [${c.contributor} #${c.contribNumber}] ${c.content}`)
     .join("\n");
 
   // Wording matters more than it looks. Angle-bracket placeholders like
@@ -91,9 +102,11 @@ export function citationSystemPrompt(chunks: BrainChunk[]): Msg {
   // nothing to cite.
   const citationRule = chunks.length
     ? "RULE 2: when your answer uses information from a brain chunk, you MUST " +
-      "write the citation immediately after that information, in the form " +
-      `${example} — copying the exact name and number from that chunk's ` +
-      "brackets. Never cite a name or number not listed above.\n"
+      "write TWO things immediately after that information: the chunk's " +
+      `double-bracket marker exactly as shown (e.g. ${markerFor(chunks[0].chunkId)}), ` +
+      `then the human citation ${example} — copying the exact name and number ` +
+      "from that chunk's brackets. Never write a marker, name or number that is " +
+      "not listed above.\n"
     : "";
 
   return {
@@ -272,7 +285,11 @@ export async function runInference(
   // attestation: a sticker reading "certified" that we printed ourselves.
   const attestationRef = sealed ? await fetchAttestation(env, responseId) : undefined;
 
-  return { text, sealed, attestationRef, zgRunRef };
+  // Attribute BEFORE stripping: the markers are how we know what was used, and
+  // the reader should never see them. Validation happens inside citedChunkIds —
+  // only ids we actually offered can come back out.
+  const usedChunkIds = citedChunkIds(text, brainChunks);
+  return { text: stripMarkers(text), usedChunkIds, sealed, attestationRef, zgRunRef };
 }
 
 /**

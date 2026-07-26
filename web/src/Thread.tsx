@@ -18,6 +18,14 @@ import type { SessionView } from "./session";
 import type { BuildStep } from "./buildPath";
 import { agentLabel } from "./Brain";
 
+/**
+ * Attribution markers ([[c_abc123]]) are how the server knows which knowledge
+ * an answer used. They are plumbing: the server strips them from the stored
+ * text, but they still arrive token-by-token while streaming, so they are also
+ * stripped here at render time.
+ */
+const MARKER = /\[\[[A-Za-z0-9_-]{3,64}\]\]/g;
+
 const CITATION = /(\(per [^)]*'s contribution #\d+\))/g;
 const IS_CITATION = /^\(per .*'s contribution #\d+\)$/;
 
@@ -54,7 +62,9 @@ const highlight = (node: ReactNode): ReactNode => {
  * and `**bold**` on screen across the whole conversation pane, which made
  * correct answers look broken.
  */
-export const AgentMarkdown: FC<{ text: string }> = ({ text }) => (
+export const AgentMarkdown: FC<{ text: string }> = ({ text: raw }) => {
+  const text = raw.replace(MARKER, "").replace(/[ \t]{2,}/g, " ");
+  return (
   <Markdown
     remarkPlugins={[remarkGfm]}
     components={{
@@ -84,7 +94,8 @@ export const AgentMarkdown: FC<{ text: string }> = ({ text }) => (
   >
     {text}
   </Markdown>
-);
+  );
+};
 
 /**
  * Reads the hovered message's own text — and the build-path step that was on
